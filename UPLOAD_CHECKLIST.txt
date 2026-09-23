@@ -1,0 +1,27 @@
+﻿# CHECKLIST UPLOAD KE HOSTING
+
+## File yang WAJIB diupload (copy ke hosting via FTP/cPanel):
+
+### PHP Files:
+1. index.php
+2. includes/functions.php
+3. includes/auth.php
+4. modules/landing.php
+5. modules/login.php
+
+### Asset Files:
+6. assets/css/landing.css
+7. assets/js/landing.js
+
+### Database:
+8. Jalankan fix_hosting_database.sql di phpMyAdmin hosting
+
+## Urutan upload:
+1. Upload semua PHP files dulu
+2. Upload asset files
+3. Login phpMyAdmin hosting
+4. Pilih database
+5. Klik tab SQL
+6. Copy-paste isi fix_hosting_database.sql
+7. Klik Go/Execute
+8. Test akses domain

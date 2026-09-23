@@ -1,0 +1,9 @@
+# Block All Direct Access (Apache 2.4+)
+# Lampiran hanya bisa diakses via serve.php yang terotentikasi
+Require all denied
+
+# Fallback untuk keamanan tambahan (Disable PHP & CGI)
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+Options -Indexes -ExecCGI

@@ -1,0 +1,58 @@
+﻿# ── Sistem Manajemen Risiko — .htaccess ──────────────────────
+Options -Indexes
+
+# Salinan aplikasi, dump, dan file sementara tidak boleh diakses dari web.
+RedirectMatch 403 ^/manrisv2/temp_extract(?:/|$)
+
+# ── Lindungi file sensitif ───────────────────────────────────
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+<FilesMatch "\.(env|sql|md|log|txt|zip|py|bak)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(error_log|output2?\.html)$">
+  Require all denied
+</FilesMatch>
+
+# ── Default-deny: tolak akses langsung ke SEMUA file PHP ───────────────────────
+# Hanya entry point inti yang boleh diakses via web. Semua skrip utilitas,
+# maintenance, fix_*, update_*, check_*, modul, dan includes otomatis diblokir
+# tanpa perlu mendaftarkan satu per satu (defense-in-depth terhadap file sampah).
+#
+# Entry point yang diizinkan:
+#   index.php      — router utama (semua halaman via ?page=)
+#   api.php        — REST API (termasuk endpoint internal: heatmap, set_theme, notif)
+#   serve.php      — download file upload (terotentikasi)
+#   cron_notif.php — trigger cron (auth: header X-Cron-Key / CLI)
+#   migrate.php    — runner migrasi (auth: header X-Migration-Key / CLI)
+<FilesMatch "^(?!index\.php$|api\.php$|serve\.php$|cron_notif\.php$|migrate\.php$).*\.php$">
+  Require all denied
+</FilesMatch>
+
+
+# ── Security Headers ──────────────────────────────────────────
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  # HSTS hanya saat HTTPS
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+  # CSP: izinkan asset lokal + CDN (Chart.js, Font Awesome, DataTables, SweetAlert2)
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: https://api.qrserver.com https://maps.gstatic.com https://*.googleapis.com; font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://maps.googleapis.com; frame-src https://www.google.com https://maps.google.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+</IfModule>
+
+# ── Gzip compression ─────────────────────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript
+</IfModule>
+
+# ── Browser Cache ─────────────────────────────────────────────
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+</IfModule>

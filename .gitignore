@@ -1,0 +1,24 @@
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Database dumps
+*.sql
+*.sql.gz
+
+# Logs
+*.log
+error_log.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup zips
+*.zip
+manris_cpanel.zip

@@ -1,0 +1,522 @@
+{
+  "pbtResults": {
+    "2.2 Tulis property test untuk sanitasi input (Property 12 dan 13)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789984230597
+    },
+    "2.4 Tulis property test untuk helper functions (Property 9)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789986918728
+    },
+    "5.4 Tulis property test untuk output escaping (Property 14)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789987894711
+    },
+    "5.3 Tulis property test untuk cover dan lembar pengesahan (Property 2)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789989069772
+    },
+    "7.2 Tulis property test untuk pemetaan data awal (Property 3)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789989632793
+    },
+    "7.5 Tulis property test untuk nilai NULL/kosong (Property 4 dan 5)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789991729485
+    },
+    "7.4 Tulis property test untuk warna tingkat risiko (Property 6)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789991742275
+    },
+    "8.2 Tulis property test untuk agregasi kendala (Property 7 dan 8)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789994094944
+    },
+    "9.3 Tulis property test untuk agregasi RTL (Property 10 dan 11)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789994477835
+    },
+    "11.1 Tulis property test untuk akses kontrol (Property 1)": {
+      "status": "passed",
+      "lastRunTimestamp": 1789994977514
+    }
+  },
+  "executionHistory": {
+    "1.1 Tambahkan entri modul ke `index.php`": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983488225
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983502620
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983563220
+      }
+    ],
+    "1.2 Tambahkan entri sidebar di `includes/header.php`": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983488495
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983503127
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983563466
+      }
+    ],
+    "2.1 Buat `modules/laporan_monev.php` — struktur dasar, auth, dan sanitasi": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983488706
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983575489
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983682435
+      }
+    ],
+    "2.2 Tulis property test untuk sanitasi input (Property 12 dan 13)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983488889
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983709677
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789984250139
+      }
+    ],
+    "2.3 Implementasi helper functions di dalam modul": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489100
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983709995
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789984250625
+      }
+    ],
+    "2.4 Tulis property test untuk helper functions (Property 9)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489406
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789984262520
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789986969568
+      }
+    ],
+    "3. Checkpoint — Pastikan semua test pass": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489497
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994529579
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789995000981
+      }
+    ],
+    "4.1 Render Form Generator dalam layout aplikasi": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489574
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789984263053
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789986969788
+      }
+    ],
+    "5.1 Output header HTML dan CSS inline": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489648
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789986982045
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987098537
+      }
+    ],
+    "5.2 Render halaman Cover dan Lembar Pengesahan": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489733
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987110124
+      }
+    ],
+    "5.3 Tulis property test untuk cover dan lembar pengesahan (Property 2)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983489921
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987284256
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989116266
+      }
+    ],
+    "5.4 Tulis property test untuk output escaping (Property 14)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490043
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987284890
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989116816
+      }
+    ],
+    "6.1 Render BAB I dengan tiga subbab hardcoded": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490181
+      },
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987110332
+      }
+    ],
+    "7.1 Render 6 tabel unit kerja dengan data dari query": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490306
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789987285181
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989117607
+      }
+    ],
+    "7.2 Tulis property test untuk pemetaan data awal (Property 3)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490423
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989130236
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989651525
+      }
+    ],
+    "7.3 Terapkan warna sel tingkat risiko menggunakan helper functions": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490515
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989130506
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989651815
+      }
+    ],
+    "7.4 Tulis property test untuk warna tingkat risiko (Property 6)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490589
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989663687
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991768885
+      }
+    ],
+    "7.5 Tulis property test untuk nilai NULL/kosong (Property 4 dan 5)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490672
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989664629
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991769747
+      }
+    ],
+    "8.1 Render subbab kendala untuk 6 unit kerja": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983490860
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789989664943
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991770258
+      }
+    ],
+    "8.2 Tulis property test untuk agregasi kendala (Property 7 dan 8)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491024
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991802103
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994124055
+      }
+    ],
+    "9.1 Render subbab Kesimpulan Statistik untuk 6 unit kerja": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491137
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991802729
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994124517
+      }
+    ],
+    "9.2 Render subbab Rencana Tindak Lanjut untuk 6 unit kerja": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491235
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991803258
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994125250
+      }
+    ],
+    "9.3 Tulis property test untuk agregasi RTL (Property 10 dan 11)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491321
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994149378
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994500932
+      }
+    ],
+    "9.4 Tutup tag `</body>` dan `</html>` pada dokumen output": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491400
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994150055
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994502072
+      }
+    ],
+    "10. Checkpoint — Pastikan semua test pass": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491464
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789995008576
+      }
+    ],
+    "11.1 Tulis property test untuk akses kontrol (Property 1)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983491538
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994529922
+      },
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789995001555
+      }
+    ],
+    "1. Registrasi modul dan sidebar": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789983563541
+      }
+    ],
+    "2. Buat file modul dengan auth, sanitasi input, dan helper functions": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789986969673
+      }
+    ],
+    "4. Implementasi Mode Form (halaman input parameter)": [
+      {
+        "executionId": "0466cf7e-c4e8-4d3f-8ff9-ef3df0f92343",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789986969867
+      }
+    ],
+    "7. Implementasi BAB II — Tabel Pelaksanaan Pengendalian Risiko": [
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789991770014
+      }
+    ],
+    "8. Implementasi BAB III — Hambatan Per Unit Kerja": [
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994124193
+      }
+    ],
+    "9. Implementasi BAB IV — Penutup (Kesimpulan dan RTL)": [
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789994502356
+      }
+    ],
+    "11. Checkpoint akhir — Verifikasi property access control (Property 1)": [
+      {
+        "executionId": "33d0a312-774b-4315-a5e2-4dff5d07a859",
+        "chatSessionId": "sess_e5cf0e21-209f-4974-a97f-b9a2f391899b",
+        "timestamp": 1789995001727
+      }
+    ]
+  }
+}

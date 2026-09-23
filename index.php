@@ -1,0 +1,264 @@
+<?php
+/**
+ * ENTRY POINT — Router Utama
+ * Semua request masuk melalui file ini
+ */
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/functions.php';
+
+// ── Pembersih OPcache self-service (Admin only) ──────────────
+if (isset($_GET['clear_cache']) && isLoggedIn() && hasRole('Admin') && function_exists('opcache_reset')) {
+    opcache_reset();
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "OK — OPcache dibersihkan pada " . date('Y-m-d H:i:s') . ".\n";
+    echo "Silakan refresh halaman browser (Ctrl+F5).\n";
+    exit;
+}
+
+// ── Tentukan halaman ──────────────────────────────────────────
+$page = $_GET['page'] ?? 'landing';
+
+// ── Handle auth POST (login/logout) — PERTAMA, sebelum cek halaman ───
+// Wajib di sini agar redirect pasca-login ke dashboard tidak terpotong
+if (isset($_POST['action']) || isset($_GET['action'])) {
+    require_once __DIR__ . '/includes/auth.php';
+}
+
+// ── Landing page — untuk user yang belum login ───────────────
+if ($page === 'landing' || $page === '') {
+    if (isLoggedIn()) {
+        // User sudah login → langsung ke dashboard
+        header('Location: ' . APP_URL . '/index.php?page=dashboard');
+        exit;
+    }
+    include __DIR__ . '/modules/landing.php';
+    exit;
+}
+
+// ── Paksa login untuk halaman lain ───────────────────────────
+if (!isLoggedIn() && $page !== 'login') {
+    header('Location: ' . APP_URL . '/index.php?page=login');
+    exit;
+}
+
+// Sudah login tapi akses halaman login → dashboard
+if (isLoggedIn() && $page === 'login') {
+    header('Location: ' . APP_URL . '/index.php?page=dashboard');
+    exit;
+}
+
+// ── Halaman login — layout terpisah ──────────────────────────
+if ($page === 'login') {
+    include __DIR__ . '/modules/login.php';
+    exit;
+}
+// ── POST handler — WAJIB sebelum header.php di-include ───────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postHandlers = [
+        'risiko'         => 'modules/risiko.php',
+        'mitigasi'       => 'modules/mitigasi.php',
+        'user'           => 'modules/user.php',
+        'profile'        => 'modules/profile.php',
+        'profil_risiko'  => 'modules/profil_risiko.php',
+        'kategori'       => 'modules/kategori.php',
+        'kkpr'           => 'modules/kkpr.php',
+        'kkpmr'          => 'modules/kkpmr.php',
+        'ikk'            => 'modules/ikk.php',
+        'backup'         => 'modules/backup_restore.php',
+        'saran_mitigasi' => 'modules/saran_mitigasi.php',
+        'laporan_konsolidasi' => 'modules/laporan_konsolidasi.php',
+        'master_indikator' => 'modules/master_indikator.php',
+        'monev_triwulan' => 'modules/monev_tahunan.php',
+        'monev_tahunan' => 'modules/monev_tahunan.php',
+        'bot_settings'   => 'modules/bot_settings.php',
+        'laporan_monev'  => 'modules/laporan_monev.php',
+    ];
+    if (isset($postHandlers[$page])) {
+        try {
+            include __DIR__ . '/' . $postHandlers[$page];
+        } catch (Throwable $e) {
+            error_log('[manris] POST Handler error (' . $page . '): ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            setFlash('error', 'Terjadi kesalahan sistem saat memproses form: ' . $e->getMessage());
+            header('Location: ' . APP_URL . '/index.php?page=' . urlencode($page));
+        }
+        exit;
+    }
+}
+
+// ── Export PDF/Excel — bypass layout ─────────────────────────
+if ($page === 'mitigasi' && ($_GET['aksi'] ?? '') === 'saran_otomatis') {
+    include __DIR__ . '/modules/mitigasi.php';
+    exit;
+}
+
+if ($page === 'laporan' && isset($_GET['export'])
+    && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/laporan.php';
+    exit;
+}
+
+// ── Download Backup — bypass layout ───────────────────────────
+if ($page === 'backup' && isset($_GET['action']) && $_GET['action'] === 'download') {
+    try {
+        include __DIR__ . '/modules/backup_restore.php';
+    } catch (Throwable $e) {
+        error_log('[manris] Backup download error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        setFlash('error', 'Gagal mengunduh backup: ' . $e->getMessage());
+        header('Location: ' . APP_URL . '/index.php?page=backup');
+    }
+    exit;
+}
+
+// ── Export Mitigasi (Excel/PDF) — bypass layout ──────────────
+if ($page === 'mitigasi' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/mitigasi.php';
+    exit;
+}
+
+// ── Export Konsolidasi (Excel/PDF) — bypass layout ───────────
+if ($page === 'laporan_konsolidasi' && isset($_GET['export'])
+    && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/laporan_konsolidasi.php';
+    exit;
+}
+
+// ── Export Daftar Risiko (Excel/PDF) — bypass layout ─────────
+if ($page === 'risiko' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/risiko.php';
+    exit;
+}
+
+// ── Export Profil Risiko (Excel/PDF) — bypass layout ─────────
+if ($page === 'profil_risiko' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    if ($_GET['export'] === 'pdf') {
+        include __DIR__ . '/modules/profil_risiko_pdf.php';
+    } else {
+        include __DIR__ . '/modules/profil_risiko.php';
+    }
+    exit;
+}
+
+// ── Export KKPR (Excel/PDF) — bypass layout ──────────────────
+if ($page === 'kkpr' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    if ($_GET['export'] === 'pdf') {
+        include __DIR__ . '/modules/kkpr_pdf.php';
+    } else {
+        include __DIR__ . '/modules/kkpr.php';
+    }
+    exit;
+}
+
+// ── Export KKPMR (Excel/PDF) — bypass layout ─────────────────
+if ($page === 'kkpmr' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    if ($_GET['export'] === 'pdf') {
+        include __DIR__ . '/modules/kkpmr_pdf.php';
+    } else {
+        include __DIR__ . '/modules/kkpmr.php';
+    }
+    exit;
+}
+
+// ── Export IKK (Excel/PDF) — bypass layout ───────────────────
+if ($page === 'ikk' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    if ($_GET['export'] === 'pdf') {
+        include __DIR__ . '/modules/ikk_pdf.php';
+    } else {
+        include __DIR__ . '/modules/ikk.php';
+    }
+    exit;
+}
+
+// ── Export Monev (Excel/PDF) — bypass layout ─────────────────
+if ($page === 'monev' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/monev.php';
+    exit;
+}
+
+// ── Export Monev Tahunan & Konsolidasi (Excel/PDF) — bypass layout ─
+if (in_array($page, ['monev_tahunan', 'monev_konsolidasi'], true)
+    && isset($_GET['type']) && in_array($_GET['type'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/export_monev_konsolidasi.php';
+    exit;
+}
+
+// ── Export Master Indikator (Excel/PDF) — bypass layout ──────
+if ($page === 'master_indikator' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/master_indikator.php';
+    exit;
+}
+
+// ── Laporan Monev — bypass layout untuk output HTML mandiri ──
+if ($page === 'laporan_monev' && ($_GET['generate'] ?? '') === '1') {
+    include __DIR__ . '/modules/laporan_monev.php';
+    exit;
+}
+
+// ── Mapping modul GET ─────────────────────────────────────────
+$modules = [
+    'dashboard'      => 'modules/dashboard.php',
+    'persetujuan'    => 'modules/persetujuan.php',
+    'diagnostik_persetujuan' => 'modules/diagnostik_persetujuan.php',
+    'risiko'         => 'modules/risiko.php',
+    'mitigasi'       => 'modules/mitigasi.php',
+    'laporan'              => 'modules/laporan.php',
+    'laporan_konsolidasi'  => 'modules/laporan_konsolidasi.php',
+    'monev_konsolidasi' => 'modules/monev_konsolidasi.php',
+    'master_indikator' => 'modules/master_indikator.php',
+    'profil_risiko'  => 'modules/profil_risiko.php',
+    'kkpr'           => 'modules/kkpr.php',
+    'kkpmr'          => 'modules/kkpmr.php',
+    'ikk'            => 'modules/ikk.php',
+    'monev'          => 'modules/monev.php',
+    'monev_triwulan' => 'modules/monev_tahunan.php',
+    'monev_tahunan'  => 'modules/monev_tahunan.php',
+    'kategori'       => 'modules/kategori.php',
+    'saran_mitigasi' => 'modules/saran_mitigasi.php',
+    'user'           => 'modules/user.php',
+    'log'            => 'modules/log.php',
+    'profile'        => 'modules/profile.php',
+    'backup'         => 'modules/backup_restore.php',
+    'bot_settings'   => 'modules/bot_settings.php',
+    'laporan_monev'  => 'modules/laporan_monev.php',
+];
+
+$moduleFile = $modules[$page] ?? null;
+
+// ── Render layout — HANYA setelah semua redirect selesai ─────
+include __DIR__ . '/includes/header.php';
+
+// Overlay yang belum dibuka tidak boleh menahan seluruh klik halaman.
+// Inline display:none dipakai oleh modal-modul; aturan ini juga melindungi
+// bila state overlay tersisa setelah browser memulihkan halaman dari cache.
+echo '<style>
+  .modal-overlay[style*="display:none"],
+  .modal-overlay[style*="display: none"],
+  .sidebar-overlay:not(.show) {
+    pointer-events:none !important;
+    visibility:hidden;
+  }
+  .modal-overlay[style*="display:flex"],
+  .modal-overlay[style*="display: flex"],
+  .sidebar-overlay.show {
+    pointer-events:auto !important;
+    visibility:visible;
+  }
+</style>';
+
+if ($moduleFile && file_exists(__DIR__ . '/' . $moduleFile)) {
+    try {
+        include __DIR__ . '/' . $moduleFile;
+    } catch (Throwable $e) {
+        error_log('[manris] Module error (' . $page . '): ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        $detail = APP_ENV === 'development'
+            ? htmlspecialchars($e->getMessage()) . ' di ' . htmlspecialchars($e->getFile()) . ':' . $e->getLine()
+            : 'Kesalahan telah dicatat. Silakan hubungi administrator.';
+        echo '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Terjadi kesalahan pada halaman ini</h3><p>' . $detail . '</p></div>';
+    }
+} else {
+    echo '<div class="empty-state">
+            <i class="fas fa-exclamation-circle"></i>
+            <h3>404 — Halaman Tidak Ditemukan</h3>
+          </div>';
+}
+
+include __DIR__ . '/includes/footer.php';
