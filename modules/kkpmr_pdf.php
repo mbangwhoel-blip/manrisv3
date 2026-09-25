@@ -17,7 +17,7 @@ else $s->bind_param('i', $id);
 $s->execute();
 $h = $s->get_result()->fetch_assoc(); $s->close();
 if (!$h) { http_response_code(404); echo 'KKPR tidak ditemukan'; exit; }
-$s2 = $db->prepare('SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY no_urut, id');
+$s2 = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
 $s2->bind_param('i', $id); $s2->execute();
 $rows = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 

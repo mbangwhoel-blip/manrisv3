@@ -261,22 +261,34 @@ if ($appStatus === 'disetujui') {
     </div>
   </div>
   <div class="monev-scroll-wrap">
-    <table class="data-table no-datatable" id="tableMonevKonsol" style="font-size:.8rem">
+    <table class="data-table profil-detail-table monev-data-table no-datatable" id="tableMonevKonsol">
+      <colgroup>
+        <col style="width:36px">
+        <col style="width:72px">
+        <col style="min-width:160px">
+        <col style="min-width:220px">
+        <col style="min-width:110px">
+        <col style="min-width:110px">
+        <col style="width:80px">
+        <col style="width:105px">
+        <col style="width:105px">
+      </colgroup>
       <thead>
         <tr>
-          <th style="width:44px;text-align:center">NO</th>
-          <th style="min-width:150px">UNIT</th>
-          <th style="min-width:220px">RISIKO</th>
-          <th style="min-width:120px">KONDISI AWAL</th>
-          <th style="min-width:120px">KONDISI SAAT INI</th>
-          <th style="width:86px;text-align:center">PERUBAHAN</th>
-          <th style="width:110px;text-align:center">SIMPULAN</th>
-          <th style="width:118px;text-align:center">EFEKTIVITAS</th>
+          <th style="width:36px;text-align:center">No</th>
+          <th style="width:72px;text-align:center">Kode</th>
+          <th style="min-width:160px">Unit Kerja</th>
+          <th style="min-width:220px">Nama Risiko</th>
+          <th style="text-align:center;min-width:110px">Kondisi Awal</th>
+          <th style="text-align:center;min-width:110px">Kondisi Saat Ini</th>
+          <th style="width:80px;text-align:center">Perubahan</th>
+          <th style="width:105px;text-align:center">Simpulan</th>
+          <th style="width:105px;text-align:center">Efektivitas</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($risks)): ?>
-        <tr><td colspan="8" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($tahun) ?>.</td></tr>
+        <tr><td colspan="9" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($tahun) ?>.</td></tr>
         <?php endif; ?>
         <?php foreach ($risks as $i => $r):
           $c = $curr[$r['id']] ?? null;
@@ -297,9 +309,15 @@ if ($appStatus === 'disetujui') {
             data-efektif="<?= ($c && ($c['efektifitas'] ?? '') === 'Efektif') ? 1 : 0 ?>"
             data-naik="<?= ($delta !== null && $delta < 0) ? 1 : 0 ?>"
             data-turun="<?= ($delta !== null && $delta > 0) ? 1 : 0 ?>">
-          <td style="text-align:center;color:var(--text-muted)"><?= $i + 1 ?></td>
-          <td style="font-size:.74rem"><?= xss($r['unit_pemilik_risiko'] ?? '') ?></td>
-          <td style="font-weight:600;line-height:1.4"><?= xss($r['nama_risiko']) ?></td>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $i + 1 ?></td>
+          <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '-') ?></span></td>
+          <td>
+            <div style="font-weight:500;font-size:.74rem;display:flex;align-items:flex-start;gap:4px">
+              <i class="fas fa-building" style="font-size:.68rem;color:var(--text-muted);opacity:.75;margin-top:2px"></i>
+              <span><?= xss($r['unit_pemilik_risiko'] ?? '') ?></span>
+            </div>
+          </td>
+          <td><div style="font-weight:600;color:var(--text-main);line-height:1.35"><?= xss($r['nama_risiko']) ?></div></td>
           <td>
             <div class="monev-kondisi">
               <div class="pd">P <b><?= xss($baseP ?? '-') ?></b> &middot; D <b><?= xss($baseD ?? '-') ?></b></div>

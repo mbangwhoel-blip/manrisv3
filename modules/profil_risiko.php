@@ -1269,41 +1269,40 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
     <div class="table-responsive">
       <table class="data-table no-datatable profil-detail-table" id="tableDetailRisiko">
         <colgroup>
-          <col class="col-no"><col class="col-unit"><col class="col-risk"><col class="col-code">
-          <col class="col-score"><col class="col-score"><col class="col-weight"><col class="col-score"><col class="col-level">
-          <col class="col-priority"><col class="col-control"><col class="col-schedule"><col class="col-person">
-          <col class="col-score"><col class="col-score"><col class="col-weight"><col class="col-score"><col class="col-level"><col class="col-action">
+          <col class="col-no">
+          <col class="col-code">
+          <col class="col-risk">
+          <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
+          <col class="col-control">
+          <col class="col-pic-jadwal">
+          <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
+          <?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?>
         </colgroup>
         <thead>
           <tr>
-            <th rowspan="2" style="width:40px;text-align:center">No</th>
-            <th rowspan="2" style="min-width:120px">Unit Kerja Pemilik Risiko</th>
-            <th rowspan="2" style="min-width:160px">Risiko</th>
-            <th rowspan="2">Kode Risiko</th>
-            <th colspan="5" style="text-align:center;background:#e0e7ef">Kondisi Saat Ini</th>
-            <th rowspan="2" style="min-width:40px">Prioritas Risiko</th>
-            <th rowspan="2" style="min-width:140px">Uraian Pengendalian</th>
-            <th rowspan="2">Jadwal Pelaksanaan</th>
-            <th rowspan="2" style="min-width:120px">Penanggungjawab</th>
-            <th colspan="5" style="text-align:center;background:#dcfce7">Target Penurunan Risiko</th>
-            <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2">Aksi</th><?php endif; ?>
+            <th rowspan="2" class="col-no" style="text-align:center">No</th>
+            <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
+            <th rowspan="2" class="col-risk">Risiko &amp; Unit Kerja</th>
+            <th colspan="4" style="text-align:center;background:#e2e8f0;color:#1e3a8a;font-weight:700;border-bottom:1px solid #cbd5e1">Kondisi Saat Ini</th>
+            <th rowspan="2" class="col-control">Uraian Pengendalian</th>
+            <th rowspan="2" class="col-pic-jadwal">PIC &amp; Jadwal</th>
+            <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;font-weight:700;border-bottom:1px solid #bbf7d0">Target Penurunan Risiko</th>
+            <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
           </tr>
           <tr>
-            <th style="background:#e0e7ef">P</th>
-            <th style="background:#e0e7ef">D</th>
-            <th style="background:#e0e7ef">Bobot</th>
-            <th style="background:#e0e7ef">Nilai</th>
-            <th style="background:#e0e7ef;min-width:80px">Tingkat Risiko</th>
-            <th style="background:#dcfce7">P</th>
-            <th style="background:#dcfce7">D</th>
-            <th style="background:#dcfce7">Bobot</th>
-            <th style="background:#dcfce7">Nilai</th>
-            <th style="background:#dcfce7;min-width:80px">Tingkat Risiko</th>
+            <th class="col-score" style="background:#edf2f7;text-align:center" title="Probabilitas">P</th>
+            <th class="col-score" style="background:#edf2f7;text-align:center" title="Dampak">D</th>
+            <th class="col-val" style="background:#edf2f7;text-align:center" title="Nilai &amp; Bobot">Nilai<br><span style="font-size:.62rem;font-weight:500;color:#475569">(Bobot)</span></th>
+            <th class="col-level" style="background:#edf2f7;text-align:center">Tingkat</th>
+            <th class="col-score" style="background:#e8fdf0;text-align:center" title="Target Probabilitas">P</th>
+            <th class="col-score" style="background:#e8fdf0;text-align:center" title="Target Dampak">D</th>
+            <th class="col-val" style="background:#e8fdf0;text-align:center" title="Target Nilai &amp; Bobot">Nilai<br><span style="font-size:.62rem;font-weight:500;color:#166534">(Bobot)</span></th>
+            <th class="col-level" style="background:#e8fdf0;text-align:center">Tingkat</th>
           </tr>
-  </thead>
+        </thead>
         <tbody>
         <?php if(empty($detailRows)): ?>
-        <tr><td colspan="21"><div class="empty-state" style="padding:40px">
+        <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 14 : 13 ?>"><div class="empty-state" style="padding:40px">
           <i class="fas fa-table" style="font-size:2.5rem;opacity:.3;margin-bottom:12px;display:block"></i>
           <h3>Belum ada detail risiko</h3>
           <p style="margin-top:8px;color:var(--text-muted);max-width:480px;margin-left:auto;margin-right:auto">
@@ -1331,32 +1330,59 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         <?php else: ?>
         <?php foreach($detailRows as $i => $dr): ?>
         <tr>
-          <td style="text-align:center"><?= $i + 1 ?></td>
-          <td style="font-size:.75rem"><?= xss($dr['unit_kerja']??'-') ?></td>
-          <td style="max-width:160px"><?= xss($dr['nama_risiko']) ?></td>
-          <td>
-            <code style="color:var(--accent);font-size:.75rem"><?= xss($dr['kode_risiko']??'-') ?></code>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $i + 1 ?></td>
+          <td style="text-align:center;white-space:nowrap">
+            <span class="badge-kode-risiko"><?= xss($dr['kode_risiko']??'-') ?></span>
             <?php if (!empty($dr['kode_risiko']) && !isset($aktifKode[$dr['kode_risiko']])): ?>
-            <div style="margin-top:2px"><span class="badge badge-warning" title="Risiko master sudah dihapus atau belum disetujui di Identifikasi Risiko" style="font-size:.62rem"><i class="fas fa-exclamation-triangle"></i> Master nonaktif</span></div>
+            <div style="margin-top:2px"><span class="badge badge-warning" title="Risiko master nonaktif" style="font-size:.6rem;padding:1px 4px"><i class="fas fa-exclamation-triangle"></i> Nonaktif</span></div>
             <?php endif; ?>
+          </td>
+          <td>
+            <div style="font-weight:600;color:var(--text-main);line-height:1.35;margin-bottom:3px"><?= xss($dr['nama_risiko']) ?></div>
+            <div style="font-size:.71rem;color:var(--text-muted);display:flex;align-items:center;gap:4px">
+              <i class="fas fa-building" style="font-size:.65rem;color:var(--text-muted);opacity:.7"></i>
+              <span><?= xss($dr['unit_kerja']??'-') ?></span>
+            </div>
           </td>
           <td style="text-align:center;font-weight:700"><?= $dr['probabilitas'] ?></td>
           <td style="text-align:center;font-weight:700"><?= $dr['dampak'] ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--accent)"><?= $dr['bobot'] ?></td>
-          <td style="text-align:center;font-weight:700"><?= round((float)$dr['nilai']) ?></td>
-          <td style="text-align:center"><span style="background:<?= bgTingkat($dr['tingkat_risiko']??'Rendah') ?>;color:<?= colorTingkat($dr['tingkat_risiko']??'Rendah') ?>;padding:2px 8px;border-radius:10px;font-weight:700;font-size:.72rem"><?= xss($dr['tingkat_risiko']??'-') ?></span></td>
-          <td style="text-align:center;font-weight:700"><?= $dr['prioritas_risiko'] ?></td>
-          <td style="max-width:140px;font-size:.75rem"><?= xss($dr['rencana_penanganan']??'') ?></td>
-          <td style="font-size:.75rem;max-width:120px;word-wrap:break-word;white-space:normal"><?= xss($dr['jadwal_pelaksanaan']??'') ?></td>
-          <td style="font-size:.75rem"><?= xss($dr['penanggungjawab']??'') ?></td>
+          <td style="text-align:center">
+            <div style="font-weight:700;font-size:.82rem;line-height:1.1"><?= round((float)$dr['nilai']) ?></div>
+            <div style="font-size:.66rem;color:var(--accent);font-weight:600;margin-top:1px" title="Bobot"><?= $dr['bobot'] ?></div>
+          </td>
+          <td style="text-align:center">
+            <span style="background:<?= bgTingkat($dr['tingkat_risiko']??'Rendah') ?>;color:<?= colorTingkat($dr['tingkat_risiko']??'Rendah') ?>;padding:3px 8px;border-radius:12px;font-weight:700;font-size:.70rem;display:inline-block;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.06)">
+              <?= xss($dr['tingkat_risiko']??'-') ?>
+            </span>
+          </td>
+          <td style="font-size:.75rem;line-height:1.35;word-break:break-word">
+            <?= nl2br(xss($dr['rencana_penanganan']??'-')) ?>
+          </td>
+          <td style="line-height:1.35">
+            <div style="font-weight:600;font-size:.74rem;color:var(--text-main);margin-bottom:3px;word-break:break-word">
+              <i class="fas fa-user-tie" style="color:var(--primary);font-size:.70rem;margin-right:3px"></i><?= xss($dr['penanggungjawab']??'-') ?>
+            </div>
+            <?php if(!empty($dr['jadwal_pelaksanaan'])): ?>
+            <div style="font-size:.69rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:4px">
+              <i class="far fa-calendar-alt" style="font-size:.67rem;margin-top:2px;opacity:.75"></i>
+              <span style="word-break:break-word"><?= xss($dr['jadwal_pelaksanaan']) ?></span>
+            </div>
+            <?php endif; ?>
+          </td>
           <td style="text-align:center;font-weight:700"><?= $dr['target_p'] ?></td>
           <td style="text-align:center;font-weight:700"><?= $dr['target_d'] ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--success)"><?= $dr['target_bobot'] ?></td>
-          <td style="text-align:center;font-weight:700"><?= round((float)$dr['target_nilai']) ?></td>
-          <td style="text-align:center"><span style="background:<?= bgTingkat($dr['target_tingkat_risiko']??'Rendah') ?>;color:<?= colorTingkat($dr['target_tingkat_risiko']??'Rendah') ?>;padding:2px 8px;border-radius:10px;font-weight:700;font-size:.72rem"><?= xss($dr['target_tingkat_risiko']??'-') ?></span></td>
+          <td style="text-align:center">
+            <div style="font-weight:700;font-size:.82rem;line-height:1.1;color:var(--success)"><?= round((float)$dr['target_nilai']) ?></div>
+            <div style="font-size:.66rem;color:#16a34a;font-weight:600;margin-top:1px" title="Target Bobot"><?= $dr['target_bobot'] ?></div>
+          </td>
+          <td style="text-align:center">
+            <span style="background:<?= bgTingkat($dr['target_tingkat_risiko']??'Rendah') ?>;color:<?= colorTingkat($dr['target_tingkat_risiko']??'Rendah') ?>;padding:3px 8px;border-radius:12px;font-weight:700;font-size:.70rem;display:inline-block;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.06)">
+              <?= xss($dr['target_tingkat_risiko']??'-') ?>
+            </span>
+          </td>
           <?php if(hasRole('Admin','Risk Manager')): ?>
-          <td class="risiko-action-cell">
-                        <div class="act-btn-group">
+          <td class="risiko-action-cell" style="text-align:center;white-space:nowrap">
+            <div class="act-btn-group" style="justify-content:center">
               <button type="button" class="act-btn act-btn-edit"
                 onclick='editDetailModal(<?= htmlspecialchars(json_encode($dr), ENT_QUOTES) ?>)'
                 title="Edit">

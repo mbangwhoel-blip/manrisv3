@@ -156,6 +156,90 @@ $trendStmt->execute();
 foreach ($trendStmt->get_result()->fetch_all(MYSQLI_ASSOC) as $trendRow) $trendValues[(int)$trendRow['triwulan'] - 1] = round((float)$trendRow['avg_nilai'], 2);
 $trendStmt->close();
 
+// ── Data Matriks Risiko 5x5 Triwulanan ─────────────────────────────
+$allTwQuery = $db->prepare("SELECT m.*, r.nama_risiko, r.kode_risiko, h.unit_pemilik_risiko FROM monev_triwulan m JOIN kkpr_risiko r ON r.id=m.id_risiko JOIN kkpr_header h ON h.id=r.id_kkpr WHERE h.tahun=?" . ($ownerSql !== '' ? ' AND h.created_by=?' : ''));
+if ($ownerSql !== '') {
+    $allTwUid = (int)$_SESSION['user_id'];
+    $allTwQuery->bind_param('si', $activeTahun, $allTwUid);
+} else {
+    $allTwQuery->bind_param('s', $activeTahun);
+}
+$allTwQuery->execute();
+$allTwRows = $allTwQuery->get_result()->fetch_all(MYSQLI_ASSOC);
+$allTwQuery->close();
+
+$twByRisk = [];
+foreach ($allTwRows as $twItem) {
+    $twByRisk[(int)$twItem['triwulan']][(int)$twItem['id_risiko']] = $twItem;
+}
+
+$matrixData = [
+    'awal' => ['label' => 'Kondisi Awal (Baseline KKPR)', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw1'  => ['label' => 'Triwulan I', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw2'  => ['label' => 'Triwulan II', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw3'  => ['label' => 'Triwulan III', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw4'  => ['label' => 'Triwulan IV', 'counts' => [], 'items' => [], 'total' => 0],
+];
+
+for ($p = 1; $p <= 5; $p++) {
+    for ($d = 1; $d <= 5; $d++) {
+        foreach (['awal', 'tw1', 'tw2', 'tw3', 'tw4'] as $k) {
+            $matrixData[$k]['counts'][$p][$d] = 0;
+            $matrixData[$k]['items'][$p][$d] = [];
+        }
+    }
+}
+
+// 1. Matriks Awal (Baseline)
+foreach ($rows as $r) {
+    $p = max(1, min(5, (int)($r['probabilitas'] ?? 1)));
+    $d = max(1, min(5, (int)($r['dampak_level'] ?? 1)));
+    $skor = (int)round((float)($r['nilai_risiko'] ?? ($p * $d * getBobot($p, $d))));
+    $level = $r['tingkat_risiko'] ?: getLevelRisiko($skor);
+    $matrixData['awal']['counts'][$p][$d]++;
+    $matrixData['awal']['items'][$p][$d][] = [
+        'id' => $r['id'],
+        'kode' => $r['kode_risiko'] ?: '-',
+        'nama' => $r['nama_risiko'] ?: '-',
+        'unit' => $r['unit_pemilik_risiko'] ?: '-',
+        'p' => $p,
+        'd' => $d,
+        'nilai' => $skor,
+        'tingkat' => $level,
+        'status' => 'Baseline Awal'
+    ];
+    $matrixData['awal']['total']++;
+}
+
+// 2. Matriks TW1..TW4
+for ($tw = 1; $tw <= 4; $tw++) {
+    $k = 'tw' . $tw;
+    foreach ($rows as $r) {
+        $twData = $twByRisk[$tw][$r['id']] ?? null;
+        if ($twData && $twData['pantau_nilai'] !== null && $twData['pantau_p'] !== null && $twData['pantau_d'] !== null) {
+            $p = max(1, min(5, (int)$twData['pantau_p']));
+            $d = max(1, min(5, (int)$twData['pantau_d']));
+            $skor = (int)round((float)$twData['pantau_nilai']);
+            $level = $twData['pantau_tingkat'] ?: getLevelRisiko($skor);
+            $matrixData[$k]['counts'][$p][$d]++;
+            $matrixData[$k]['items'][$p][$d][] = [
+                'id' => $r['id'],
+                'kode' => $r['kode_risiko'] ?: '-',
+                'nama' => $r['nama_risiko'] ?: '-',
+                'unit' => $r['unit_pemilik_risiko'] ?: '-',
+                'p' => $p,
+                'd' => $d,
+                'nilai' => $skor,
+                'tingkat' => $level,
+                'efektifitas' => $twData['efektifitas'] ?? '-',
+                'simpulan' => $twData['simpulan_tingkat'] ?? '-',
+                'status' => 'Dipantau'
+            ];
+            $matrixData[$k]['total']++;
+        }
+    }
+}
+
 // ── Data pendukung UI ────────────────────────────────────────────────────────
 $pctTerisi = $chartStats['total'] > 0 ? round($chartStats['terpantau'] / $chartStats['total'] * 100) : 0;
 $pctEfektif = $chartStats['terpantau'] > 0 ? round($chartStats['efektif'] / $chartStats['terpantau'] * 100) : 0;
@@ -314,14 +398,90 @@ $efektifBadge = function (?string $e): string {
 <?php endif; ?>
 
 <?php if ($chartStats['total'] > 0): ?>
-<!-- Chart: tren TW1-4 + distribusi level -->
-<div class="monev-chart-grid">
-  <div class="card">
-    <div class="card-header" style="background:linear-gradient(135deg,rgba(124,58,237,.05),transparent)">
-      <span class="card-title"><i class="fas fa-chart-line" style="color:var(--accent)"></i> Tren Skor Rata-rata Triwulan</span>
-      <span class="monev-chart-help" style="color:var(--text-muted);font-size:.72rem">Titik kosong = triwulan belum terisi</span>
+<?php
+  $pLabels = [1=>'Jarang', 2=>'Kecil', 3=>'Sedang', 4=>'Besar', 5=>'Hampir Pasti'];
+  $dLabels = [1=>'Tidak Signifikan', 2=>'Kecil', 3=>'Sedang', 4=>'Besar', 5=>'Katastropik'];
+  $tingkatShort = fn($s) => $s>=20?'Sangat Tinggi':($s>=15?'Tinggi':($s>=10?'Sedang':($s>=5?'Rendah':'Sangat Rendah')));
+  $activeMatrixPeriod = $jenisLaporan === 'tahunan' ? 'tw4' : ($jenisLaporan === 'tw1' ? 'tw1' : ($jenisLaporan === 'tw2' ? 'tw2' : ($jenisLaporan === 'tw3' ? 'tw3' : 'tw4')));
+?>
+<!-- Matriks Risiko 5x5 Interaktif Pemantauan Triwulanan -->
+<div class="card" style="margin-bottom:20px;display:flex;flex-direction:column">
+  <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.06),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 20px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:10px;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.15rem">
+        <i class="fas fa-th"></i>
+      </div>
+      <div>
+        <span class="card-title" style="margin:0;font-size:1.05rem;font-weight:800"><i class="fas fa-table-cells" style="color:var(--accent);margin-right:4px"></i> Matriks Risiko 5&times;5</span>
+        <div id="matrixSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+          Periode aktif: <strong id="matrixPeriodLabel" style="color:var(--accent)">Triwulan <?= $twTarget ?></strong> &bull; <span id="matrixCountInfo">Memuat data...</span>
+        </div>
+      </div>
     </div>
-    <div class="card-body" style="height:300px;position:relative"><canvas id="monevTrenChart"></canvas></div>
+
+    <!-- Switcher Periode Triwulanan (Bisa dipantau / klik tiap triwulan) -->
+    <div class="monev-matrix-tabs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:.76rem;font-weight:700;color:var(--text-muted);margin-right:2px"><i class="fas fa-sliders"></i> Pantau Periode:</span>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='awal'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="awal" onclick="switchMonevPeriod('awal')">Kondisi Awal</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw1'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw1" onclick="switchMonevPeriod('tw1')">Triwulan I</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw2'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw2" onclick="switchMonevPeriod('tw2')">Triwulan II</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw3'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw3" onclick="switchMonevPeriod('tw3')">Triwulan III</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw4'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw4" onclick="switchMonevPeriod('tw4')">Triwulan IV</button>
+    </div>
+  </div>
+
+  <div class="card-body heatmap-wrap compact-heatmap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;text-align:center">
+    <table class="heatmap dashboard-heatmap-table" id="monevHeatmapTable">
+      <thead>
+        <tr>
+          <th style="text-align:right;padding-right:8px;font-weight:800;color:var(--text-muted)">P \ D</th>
+          <?php for($d=1;$d<=5;$d++): ?>
+            <th title="D<?= $d ?> = <?= $dLabels[$d] ?>" style="font-weight:800">D<?= $d ?></th>
+          <?php endfor; ?>
+        </tr>
+      </thead>
+      <tbody>
+        <?php for($p=5;$p>=1;$p--): ?>
+        <tr>
+          <th style="text-align:right;padding-right:8px;color:var(--text-muted);font-size:.7rem;font-weight:800" title="P<?= $p ?> = <?= $pLabels[$p] ?>">P<?= $p ?></th>
+          <?php for($d=1;$d<=5;$d++): ?>
+          <?php
+            $skor = (int)round($p * $d * getBobot($p,$d));
+            $bg   = heatmapColor($p,$d);
+            $tks  = $tingkatShort($skor);
+            $fg   = ($skor>=10 && $skor<=14) ? '#000' : '#fff';
+          ?>
+          <td id="mcell_<?= $p ?>_<?= $d ?>"
+              data-p="<?= $p ?>" data-d="<?= $d ?>" data-skor="<?= $skor ?>"
+              style="background:<?= $bg ?>;color:<?= $fg ?>;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;"
+              title="P<?= $p ?> (<?= $pLabels[$p] ?>) &times; D<?= $d ?> (<?= $dLabels[$d] ?>) &times; Bobot <?= getBobot($p,$d) ?> = <?= $skor ?> &rarr; <?= $tks ?>"
+              onclick="clickMonevCell(<?= $p ?>, <?= $d ?>, <?= $skor ?>)"
+              onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 6px 16px rgba(0,0,0,.25)'"
+              onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">
+            <div style="font-size:1.15rem;font-weight:900;line-height:1"><?= $skor ?></div>
+            <div style="font-size:.56rem;font-weight:700;opacity:.88;line-height:1.1;margin-top:2px;white-space:normal;word-wrap:break-word;text-align:center"><?= $tks ?></div>
+            <span class="count-badge" id="mbadge_<?= $p ?>_<?= $d ?>" style="display:none">0</span>
+          </td>
+          <?php endfor; ?>
+        </tr>
+        <?php endfor; ?>
+      </tbody>
+    </table>
+
+    <div class="heatmap-legend compact-heatmap-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px">
+      <div style="font-size:.7rem;color:var(--text-muted);font-weight:700;margin-bottom:4px;width:100%;text-align:center">Nilai = P &times; D &times; Bobot</div>
+      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#dc2626;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Tinggi (&ge; 20)</div>
+      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#f97316;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Tinggi (15&ndash;19)</div>
+      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#FFFF00;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sedang (10&ndash;14)</div>
+      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#22c55e;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Rendah (5&ndash;9)</div>
+      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#3b82f6;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Rendah (1&ndash;4)</div>
+    </div>
+
+    <div class="heatmap-desc" style="margin-top:10px;font-size:.68rem;color:var(--text-muted);text-align:center;line-height:1.6;width:100%">
+      <strong>P</strong> = Probabilitas (1=Jarang, 2=Kecil, 3=Sedang, 4=Besar, 5=Hampir Pasti)<br>
+      <strong>D</strong> = Dampak (1=Tidak Signifikan, 2=Kecil, 3=Sedang, 4=Besar, 5=Katastropik)<br>
+      <span style="font-size:.64rem;opacity:.85;display:inline-block;margin-top:4px"><i class="fas fa-hand-pointer"></i> Klik sel untuk melihat daftar risiko di area tersebut &bull; Klik tombol triwulan di atas untuk memantau pergeseran risiko tiap periode.</span>
+    </div>
   </div>
 </div>
 <?php endif; ?>
@@ -351,35 +511,36 @@ $efektifBadge = function (?string $e): string {
     </div>
   </div>
   <div class="monev-scroll-wrap">
-    <table class="data-table monev-data-table no-datatable" id="tableMonevTahunan" style="font-size:.78rem">
+    <table class="data-table profil-detail-table monev-data-table no-datatable" id="tableMonevTahunan">
       <colgroup>
-        <col style="width:38px"><col style="width:300px">
+        <col style="width:36px"><col style="width:72px"><col style="min-width:220px">
         <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:84px">
         <?php if ($showPrevQ): ?><col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:84px"><?php endif; ?>
         <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:62px"><col style="width:84px">
         <col style="width:88px"><col style="width:104px">
-        <?php if ($canInput): ?><col style="width:100px"><?php endif; ?>
+        <?php if ($canInput): ?><col style="width:80px"><?php endif; ?>
       </colgroup>
       <thead>
         <tr>
-          <th rowspan="2" style="text-align:center">NO</th>
-          <th rowspan="2">RISIKO</th>
-          <th colspan="5" style="text-align:center;background:rgba(100,116,139,.07)">KONDISI AWAL</th>
-          <?php if ($showPrevQ): ?><th colspan="5" style="text-align:center;background:rgba(148,163,184,.12)">KONDISI TRIWULAN <?= $twTarget - 1 ?></th><?php endif; ?>
-          <th colspan="5" style="text-align:center;background:rgba(59,130,246,.08)">KONDISI SAAT INI</th>
-          <th colspan="2" style="text-align:center;background:rgba(124,58,237,.07)">SIMPULAN</th>
-          <?php if ($canInput): ?><th rowspan="2" style="text-align:center">AKSI</th><?php endif; ?>
+          <th rowspan="2" class="col-no" style="text-align:center">No</th>
+          <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
+          <th rowspan="2" class="col-risk">Risiko &amp; Unit Kerja</th>
+          <th colspan="5" style="text-align:center;background:rgba(100,116,139,.07)">Kondisi Awal</th>
+          <?php if ($showPrevQ): ?><th colspan="5" style="text-align:center;background:rgba(148,163,184,.12)">Kondisi Triwulan <?= $twTarget - 1 ?></th><?php endif; ?>
+          <th colspan="5" style="text-align:center;background:rgba(59,130,246,.08)">Kondisi Saat Ini</th>
+          <th colspan="2" style="text-align:center;background:rgba(124,58,237,.07)">Simpulan</th>
+          <?php if ($canInput): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
         <tr>
-          <th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">BOBOT</th><th style="text-align:center">NILAI</th><th style="text-align:center">TINGKAT</th>
-          <?php if ($showPrevQ): ?><th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">BOBOT</th><th style="text-align:center">NILAI</th><th style="text-align:center">TINGKAT</th><?php endif; ?>
-          <th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">BOBOT</th><th style="text-align:center">NILAI</th><th style="text-align:center">TINGKAT</th>
-          <th style="text-align:center">TINGKAT</th><th style="text-align:center">EFEKTIVITAS</th>
+          <th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">Bobot</th><th style="text-align:center">Nilai</th><th style="text-align:center">Tingkat</th>
+          <?php if ($showPrevQ): ?><th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">Bobot</th><th style="text-align:center">Nilai</th><th style="text-align:center">Tingkat</th><?php endif; ?>
+          <th style="text-align:center">P</th><th style="text-align:center">D</th><th style="text-align:center">Bobot</th><th style="text-align:center">Nilai</th><th style="text-align:center">Tingkat</th>
+          <th style="text-align:center">Tingkat</th><th style="text-align:center">Efektivitas</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($rows)): ?>
-        <tr><td colspan="<?= ($canInput ? 15 : 14) + ($showPrevQ ? 5 : 0) ?>" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($activeTahun) ?>.</td></tr>
+        <tr><td colspan="<?= ($canInput ? 16 : 15) + ($showPrevQ ? 5 : 0) ?>" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($activeTahun) ?>.</td></tr>
         <?php endif; ?>
         <?php foreach ($rows as $i => $r): $c = $r['curr'];
           $delta = ($c && $c['pantau_nilai'] !== null) ? (float)$r['prev_nilai'] - (float)$c['pantau_nilai'] : null;
@@ -392,8 +553,17 @@ $efektifBadge = function (?string $e): string {
             data-efektif="<?= ($c && ($c['efektifitas'] ?? '') === 'Efektif') ? 1 : 0 ?>"
             data-naik="<?= ($delta !== null && $delta < 0) ? 1 : 0 ?>"
             data-turun="<?= ($delta !== null && $delta > 0) ? 1 : 0 ?>">
-          <td style="text-align:center;color:var(--text-muted)"><?= $i + 1 ?></td>
-          <td style="font-weight:600;line-height:1.4"><?= xss($r['nama_risiko']) ?></td>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $i + 1 ?></td>
+          <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '-') ?></span></td>
+          <td>
+            <div style="font-weight:600;color:var(--text-main);line-height:1.35;margin-bottom:3px"><?= xss($r['nama_risiko']) ?></div>
+            <?php if(!empty($r['unit_pemilik_risiko'])): ?>
+            <div style="font-size:.71rem;color:var(--text-muted);display:flex;align-items:center;gap:4px">
+              <i class="fas fa-building" style="font-size:.65rem;opacity:.7"></i>
+              <span><?= xss($r['unit_pemilik_risiko']) ?></span>
+            </div>
+            <?php endif; ?>
+          </td>
           <td style="text-align:center;color:var(--text-muted)"><?= $r['prev_p'] ?></td>
           <td style="text-align:center;color:var(--text-muted)"><?= $r['prev_d'] ?></td>
           <td style="text-align:center;color:var(--text-muted)"><?= number_format((float)$r['prev_bobot'], 2, '.', '') ?></td>
@@ -425,8 +595,8 @@ $efektifBadge = function (?string $e): string {
           <td style="text-align:center"><?= $simpulanBadge($c['simpulan_tingkat'] ?? null) ?></td>
           <td style="text-align:center"><?= $efektifBadge($c['efektifitas'] ?? null) ?></td>
           <?php if ($canInput): ?>
-          <td style="text-align:center">
-            <button type="button" class="btn <?= $c ? 'btn-outline' : 'btn-primary' ?> btn-sm" onclick="openMonev(<?= $i ?>)" title="Isi / ubah monev risiko ini">
+          <td style="text-align:center;white-space:nowrap">
+            <button type="button" class="btn <?= $c ? 'btn-outline' : 'btn-primary' ?> btn-sm" onclick="openMonev(<?= $i ?>)" title="Isi / ubah monev risiko ini" style="font-size:.74rem;padding:4px 10px">
               <i class="fas <?= $c ? 'fa-pen' : 'fa-plus' ?>"></i> <?= $c ? 'Ubah' : 'Isi' ?>
             </button>
           </td>
@@ -602,88 +772,152 @@ $efektifBadge = function (?string $e): string {
   @media (max-width:768px) { .monev-chart-grid { margin-bottom: 14px; } }
 </style>
 
+<style>
+  .heatmap-wrap.compact-heatmap{overflow:visible!important}
+  .dashboard-heatmap-table{width:100%!important;table-layout:fixed;border-collapse:separate;border-spacing:4px}
+  .dashboard-heatmap-table th,.dashboard-heatmap-table td{box-sizing:border-box}
+  @media(max-width:900px){
+    .heatmap{table-layout:fixed;border-spacing:3px;width:100%!important}
+    .heatmap td{height:44px!important;font-size:.75rem!important;width:auto!important;min-width:0!important;max-width:none!important}
+    .heatmap th{padding:4px 6px!important;font-size:.65rem!important;width:auto!important;min-width:0!important;max-width:none!important}
+  }
+  @media(min-width:901px){
+    .compact-heatmap{align-items:center!important}
+    .dashboard-heatmap-table{margin-left:auto!important;margin-right:auto!important;text-align:center;max-width:650px}
+    .dashboard-heatmap-table th,.dashboard-heatmap-table td{text-align:center!important;vertical-align:middle!important;width:auto!important;min-width:0!important;max-width:none!important}
+    .dashboard-heatmap-table thead th{height:30px!important;padding:4px!important}
+    .dashboard-heatmap-table tbody th{height:58px!important;padding:4px!important}
+    .compact-heatmap .heatmap{width:100%!important;max-width:650px;table-layout:fixed}
+    .compact-heatmap .heatmap td{height:58px!important;padding:6px!important;width:auto!important;min-width:0!important;max-width:none!important}
+    .compact-heatmap .heatmap td>div:first-child{font-size:1.15rem!important}
+    .compact-heatmap .heatmap td>div:nth-child(2){font-size:.56rem!important}
+    .compact-heatmap .heatmap th{font-size:.75rem!important;padding:6px!important;width:auto!important;min-width:0!important;max-width:none!important}
+  }
+</style>
+
 <script>
 (() => {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  let chartsDrawn = false;
+  // ── Data Matriks Risiko 5x5 Interaktif Triwulanan ────────────────
+  const rawMatrixData = <?= json_encode($matrixData ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+  let currentMatrixPeriod = <?= json_encode($activeMatrixPeriod ?? 'tw1') ?>;
 
-  // Chart.js dimuat dengan atribut "defer" sehingga baru tersedia SETELAH
-  // dokumen selesai di-parsing. Penggambaran grafik karena itu ditunda sampai
-  // DOMContentLoaded — jika dijalankan langsung, typeof Chart === 'undefined'
-  // dan kanvas tampil kosong.
-  function drawMonevCharts() {
-    if (chartsDrawn || typeof Chart === 'undefined') return false;
-    Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
-    Chart.defaults.borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
-    Chart.defaults.font.family = "'Inter', sans-serif";
+  window.switchMonevPeriod = function(period) {
+    currentMatrixPeriod = period;
+    document.querySelectorAll('.matrix-period-btn').forEach(btn => {
+      if (btn.dataset.period === period) {
+        btn.className = 'btn btn-sm btn-primary matrix-period-btn';
+      } else {
+        btn.className = 'btn btn-sm btn-outline matrix-period-btn';
+      }
+    });
+    renderMonevMatrix();
+  };
 
-    // ── Chart 1: Tren TW1-4 ──────────────────────────────────
-    const trenEl = document.getElementById('monevTrenChart');
-    const trendValues = <?= json_encode($trendValues) ?>;
-    const avgBaseline = <?= json_encode($chartAvgBaseline) ?>;
-    if (trenEl) {
-      const ctx = trenEl.getContext('2d');
-      const grad = ctx.createLinearGradient(0, 0, 0, 300);
-      grad.addColorStop(0, isDark ? 'rgba(34,211,238,.35)' : 'rgba(14,165,233,.25)');
-      grad.addColorStop(1, 'rgba(34,211,238,0)');
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: ['TW 1', 'TW 2', 'TW 3', 'TW 4'],
-          datasets: [
-            {
-              label: 'Rata-rata skor pantauan',
-              data: trendValues,
-              borderColor: '#0891b2',
-              backgroundColor: grad,
-              fill: true, tension: .35, borderWidth: 3,
-              pointBackgroundColor: '#0891b2', pointBorderColor: '#fff', pointBorderWidth: 2,
-              pointRadius: 5, pointHoverRadius: 8, spanGaps: false
-            },
-            {
-              label: 'Baseline penilaian awal',
-              data: [avgBaseline, avgBaseline, avgBaseline, avgBaseline],
-              borderColor: isDark ? 'rgba(148,163,184,.55)' : 'rgba(100,116,139,.5)',
-              borderDash: [6, 6], borderWidth: 2, pointRadius: 0, fill: false
-            }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'top', labels: { usePointStyle: true, padding: 14, font: { size: 11 } } },
-            tooltip: {
-              callbacks: {
-                label: c => c.datasetIndex === 0
-                  ? ' Skor rata-rata: ' + (c.parsed.y ?? '—')
-                  : ' Baseline awal: ' + c.parsed.y
-              }
-            }
-          },
-          scales: {
-            y: { beginAtZero: true, suggestedMax: 25, title: { display: true, text: 'Skor Risiko', font: { size: 11 } } },
-            x: { grid: { display: false } }
+  window.renderMonevMatrix = function() {
+    const pData = rawMatrixData[currentMatrixPeriod] || { counts: {}, items: {}, total: 0, label: '' };
+    const labelEl = document.getElementById('matrixPeriodLabel');
+    const countEl = document.getElementById('matrixCountInfo');
+    if (labelEl) labelEl.textContent = pData.label;
+    if (countEl) countEl.innerHTML = `<strong>${pData.total}</strong> dari <?= count($rows) ?> risiko terpantau`;
+
+    for (let p = 1; p <= 5; p++) {
+      for (let d = 1; d <= 5; d++) {
+        const cnt = (pData.counts && pData.counts[p] && pData.counts[p][d]) || 0;
+        const badge = document.getElementById(`mbadge_${p}_${d}`);
+        const cell = document.getElementById(`mcell_${p}_${d}`);
+        if (badge) {
+          if (cnt > 0) {
+            badge.textContent = cnt;
+            badge.style.display = 'inline-block';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+        if (cell) {
+          cell.style.cursor = cnt > 0 ? 'pointer' : 'default';
+          cell.style.opacity = (pData.total > 0 && cnt === 0) ? '0.78' : '1';
+          cell.title = `P${p} x D${d} = ${cell.dataset.skor} (${cnt} risiko pada ${pData.label})`;
+        }
+      }
+    }
+  };
+
+  window.clickMonevCell = function(p, d, skor) {
+    const pData = rawMatrixData[currentMatrixPeriod];
+    const items = (pData && pData.items && pData.items[p] && pData.items[p][d]) || [];
+    if (!items || items.length === 0) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: `Sel P${p} &times; D${d} (${pData ? pData.label : ''})`,
+          text: 'Tidak ada risiko yang terdaftar di koordinat ini pada periode tersebut.',
+          icon: 'info',
+          confirmButtonText: 'Tutup'
+        });
+      }
+      return;
+    }
+
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    let html = '<div style="max-height: 320px; overflow-y: auto; text-align: left; margin-top:8px">';
+    html += '<table class="data-table" style="width: 100%; border-collapse: collapse; font-size:.82rem">';
+    html += '<thead style="position: sticky; top: 0; background: var(--surface2); z-index:2"><tr><th style="padding:8px;border-bottom:1px solid var(--border);width:75px">Kode</th><th style="padding:8px;border-bottom:1px solid var(--border)">Nama Risiko</th><th style="padding:8px;border-bottom:1px solid var(--border);text-align:center;width:95px">Level</th><th style="padding:8px;border-bottom:1px solid var(--border);text-align:center;width:55px">Nilai</th></tr></thead><tbody>';
+
+    items.forEach(item => {
+      let bgC = '#3b82f6', fgC = '#fff';
+      if(item.tingkat === 'Sangat Tinggi') bgC = '#dc2626';
+      else if(item.tingkat === 'Tinggi') bgC = '#f97316';
+      else if(item.tingkat === 'Sedang') { bgC = '#FFFF00'; fgC = '#1e293b'; }
+      else if(item.tingkat === 'Rendah') bgC = '#22c55e';
+
+      const kode = escapeHtml(item.kode);
+      const nama = escapeHtml(item.nama);
+      const level = escapeHtml(item.tingkat);
+      const nilai = escapeHtml(item.nilai);
+      const unit = escapeHtml(item.unit);
+
+      html += `<tr>
+        <td style="padding:8px;border-bottom:1px solid var(--border)"><span class="badge-kode-risiko" style="font-size:0.75rem">${kode}</span></td>
+        <td style="padding:8px;border-bottom:1px solid var(--border);max-width:260px;white-space:normal">
+          <div style="font-weight:700;color:var(--text);line-height:1.3">${nama}</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px"><i class="fas fa-building" style="opacity:.6"></i> ${unit}</div>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center">
+          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;background:${bgC};color:${fgC}">${level}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-weight:800;color:var(--accent)">
+          ${nilai}
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: `Daftar Risiko: P${p} &times; D${d} (Skor ${skor})`,
+        html: `<div style="font-size:.82rem;color:var(--text-muted);margin-bottom:6px">Periode: <strong>${escapeHtml(pData.label)}</strong> &bull; Total: <strong>${items.length}</strong> risiko</div>${html}`,
+        width: 650,
+        showCloseButton: true,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-filter"></i> Filter di Tabel Monev',
+        cancelButtonText: 'Tutup',
+        confirmButtonColor: 'var(--primary)'
+      }).then(res => {
+        if (res.isConfirmed) {
+          const searchEl = document.getElementById('searchMonevTahunan');
+          if (searchEl) {
+            searchEl.value = items[0].kode;
+            monevTableState.q = items[0].kode.toLowerCase();
+            monevTableState.page = 1;
+            applyMonevTable();
+            const t = document.getElementById('monev-table');
+            if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         }
       });
     }
+  };
 
-    chartsDrawn = true;
-    return true;
-  }
-
-  function showMonevChartFallback() {
-    document.querySelectorAll('.monev-chart-grid .card-body').forEach(box => {
-      if (box.dataset.chartFallback) return;
-      box.dataset.chartFallback = '1';
-      box.innerHTML = '<div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);text-align:center;font-size:.8rem;padding:16px">'
-        + '<i class="fas fa-chart-line" style="font-size:1.9rem;opacity:.45"></i>'
-        + '<span>Grafik tidak dapat dimuat — library Chart belum tersedia.<br>Periksa koneksi internet lalu muat ulang halaman.</span></div>';
-    });
-  }
-
-  function initMonevCharts() {
+  function initMonevPage() {
     // ── Count-up stat cards ──────────────────────────────────
     document.querySelectorAll('.stat-value[data-count]').forEach(el => {
       const target = parseFloat(el.dataset.count) || 0;
@@ -706,21 +940,14 @@ $efektifBadge = function (?string $e): string {
       });
     }, 150);
 
-    // ── Grafik: tunggu Chart.js (defer) siap, ulangi bila belum ──
-    if (drawMonevCharts()) return;
-    let tries = 0;
-    const timer = setInterval(() => {
-      if (drawMonevCharts() || ++tries >= 25) {
-        clearInterval(timer);
-        if (!chartsDrawn) showMonevChartFallback();
-      }
-    }, 200);
+    // ── Inisialisasi Matriks Risiko 5x5 ──────────────────────
+    renderMonevMatrix();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initMonevCharts);
+    document.addEventListener('DOMContentLoaded', initMonevPage);
   } else {
-    initMonevCharts();
+    initMonevPage();
   }
 })();
 </script>

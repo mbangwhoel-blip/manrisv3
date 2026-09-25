@@ -114,7 +114,7 @@ function laporanGetDataUnit(mysqli $db, string $unitKerja, string $tahun, int $t
         LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
         WHERE h.tahun = ?
           AND h.unit_pemilik_risiko LIKE ?
-        ORDER BY r.kode_risiko
+        ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
     ";
 
     $unitLike = '%' . $unitKerja . '%';

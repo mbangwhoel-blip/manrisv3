@@ -601,57 +601,81 @@ $draftMaster = (int)$heroStats['draft'];
       </div>
     </div>
   </div>
-  <div class="table-responsive table-responsive-no-x">
-    <table class="data-table no-datatable risiko-table-compact" id="tableRisiko" style="table-layout:fixed; width:100%; word-wrap:break-word;">
+  <div class="table-responsive">
+    <table class="data-table no-datatable profil-detail-table risiko-master-table" id="tableRisiko">
+      <colgroup>
+        <col class="col-no">
+        <col class="col-code">
+        <col class="col-risk">
+        <col class="col-owner">
+        <col class="col-dept">
+        <col class="col-status">
+        <col class="col-action">
+      </colgroup>
       <thead>
         <tr>
-          <th style="width:5%;text-align:center">NO</th>
-          <th style="width:9%">KODE</th>
-          <th style="width:24%; white-space:normal;">NAMA RISIKO / KEGIATAN</th>
-          <th style="width:15%">PEMILIK</th>
-          <th style="width:15%">PENGELOLA</th>
-          <th style="width:9%;text-align:center">TANGGAL</th>
-          <th style="width:9%;text-align:center">STATUS</th>
-          <th style="width:14%;text-align:center">AKSI</th>
+          <th class="col-no" style="text-align:center">No</th>
+          <th class="col-code" style="text-align:center">Kode</th>
+          <th class="col-risk">Nama Risiko &amp; Kegiatan</th>
+          <th class="col-owner">Pemilik Risiko</th>
+          <th class="col-dept">Pengelola Risiko</th>
+          <th class="col-status" style="text-align:center">Status</th>
+          <th class="col-action" style="text-align:center">Aksi</th>
         </tr>
       </thead>
       <tbody>
       <?php if(empty($rows)): ?>
-        <tr><td colspan="8">
-          <div class="empty-state" style="padding:24px">
-            <i class="fas fa-folder-open"></i>
-            <p>Belum ada master risiko.</p>
+        <tr><td colspan="7">
+          <div class="empty-state" style="padding:32px">
+            <i class="fas fa-folder-open" style="font-size:2rem;opacity:.35;margin-bottom:8px;display:block"></i>
+            <p style="margin:0;font-weight:600;color:var(--text-muted)">Belum ada data master risiko.</p>
           </div>
         </td></tr>
       <?php else: ?>
         <?php foreach($rows as $i => $r): ?>
         <tr>
-          <td style="text-align:center"><?= $offset + $i + 1 ?></td>
-          <td><code style="font-size:0.75rem"><?= xss($r['kode_risiko']) ?></code></td>
-          <td>
-            <div style="font-weight:600"><?= xss($r['nama_risiko']) ?></div>
-            <?php if($r['nama_kegiatan']): ?><div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px"><?= xss($r['nama_kegiatan']) ?></div><?php endif; ?>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $offset + $i + 1 ?></td>
+          <td style="text-align:center;white-space:nowrap">
+            <span class="badge-kode-risiko"><?= xss($r['kode_risiko']) ?></span>
           </td>
-          <td style="font-size:0.8rem"><?= xss($r['pemilik_risiko']?:'-') ?></td>
-          <td style="font-size:0.8rem"><?= xss($r['departemen']?:'-') ?></td>
-          <td style="text-align:center;font-size:0.75rem"><?= date('d/m/Y', strtotime($r['tanggal_identifikasi'])) ?></td>
-          <td style="text-align:center">
-            <?php if ($r['approval_status'] === 'approved'): ?>
-              <span class="badge badge-success">Disetujui</span>
-            <?php elseif ($r['approval_status'] === 'rejected'): ?>
-              <span class="badge badge-danger">Ditolak</span>
-            <?php else: ?>
-              <span class="badge badge-warning">Menunggu</span>
+          <td>
+            <div style="font-weight:600;color:var(--text-main);line-height:1.35;margin-bottom:3px"><?= xss($r['nama_risiko']) ?></div>
+            <?php if(!empty($r['nama_kegiatan'])): ?>
+            <div style="font-size:.71rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:5px;margin-top:2px">
+              <i class="fas fa-tasks" style="font-size:.65rem;color:var(--text-muted);opacity:.7;margin-top:3px;flex-shrink:0"></i>
+              <span><?= xss($r['nama_kegiatan']) ?></span>
+            </div>
             <?php endif; ?>
           </td>
-                    <td class="risiko-action-cell" style="text-align:center">
-              <div class="act-btn-group">
-                <a href="?page=risiko&detail=<?= $r['id'] ?>&saran=1" class="act-btn act-btn-view" title="Detail & Saran"><i class="fas fa-eye"></i></a>
-                <?php if(hasRole('Admin','Risk Manager')): ?>
-                <button type="button" class="act-btn act-btn-edit" onclick='editRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Edit Risiko"><i class="fas fa-edit"></i></button>
-                <button type="button" class="act-btn act-btn-delete" onclick="hapusRisiko(<?= $r['id'] ?>, '<?= xss($r['kode_risiko']) ?>')" title="Hapus Risiko"><i class="fas fa-trash"></i></button>
-                <?php endif; ?>
-              </div>
+          <td>
+            <div style="font-weight:500;font-size:.75rem;color:var(--text-main);display:flex;align-items:flex-start;gap:5px">
+              <i class="fas fa-building" style="font-size:.68rem;color:var(--text-muted);opacity:.75;margin-top:2px;flex-shrink:0"></i>
+              <span><?= xss($r['pemilik_risiko'] ?: '-') ?></span>
+            </div>
+          </td>
+          <td>
+            <div style="font-weight:500;font-size:.75rem;color:var(--text-main);display:flex;align-items:flex-start;gap:5px">
+              <i class="fas fa-user-tie" style="font-size:.68rem;color:var(--primary);opacity:.8;margin-top:2px;flex-shrink:0"></i>
+              <span><?= xss($r['departemen'] ?: '-') ?></span>
+            </div>
+          </td>
+          <td style="text-align:center">
+            <?php if ($r['approval_status'] === 'approved'): ?>
+              <span class="badge badge-success" style="font-size:.69rem;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><i class="fas fa-check-circle" style="font-size:.65rem"></i> Disetujui</span>
+            <?php elseif ($r['approval_status'] === 'rejected'): ?>
+              <span class="badge badge-danger" style="font-size:.69rem;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><i class="fas fa-times-circle" style="font-size:.65rem"></i> Ditolak</span>
+            <?php else: ?>
+              <span class="badge badge-warning" style="font-size:.69rem;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><i class="fas fa-clock" style="font-size:.65rem"></i> Menunggu</span>
+            <?php endif; ?>
+          </td>
+          <td class="risiko-action-cell" style="text-align:center;white-space:nowrap">
+            <div class="act-btn-group">
+              <a href="?page=risiko&detail=<?= $r['id'] ?>&saran=1" class="act-btn act-btn-view" title="Detail & Saran"><i class="fas fa-eye"></i></a>
+              <?php if(hasRole('Admin','Risk Manager')): ?>
+              <button type="button" class="act-btn act-btn-edit" onclick='editRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Edit Risiko"><i class="fas fa-edit"></i></button>
+              <button type="button" class="act-btn act-btn-delete" onclick="hapusRisiko(<?= $r['id'] ?>, '<?= xss($r['kode_risiko']) ?>')" title="Hapus Risiko"><i class="fas fa-trash"></i></button>
+              <?php endif; ?>
+            </div>
           </td>
         </tr>
         <?php endforeach; ?>

@@ -472,12 +472,14 @@ function exportExcel(string $filename, array $headers, array $rows): void {
         echo '<Row>' . "\n";
         $c = 0;
         foreach ($r as $val) {
+            $forceStr = false;
+            if (is_array($val)) { $forceStr = true; $val = (string)($val['v'] ?? ''); }
             $val = (string)$val;
             // is it the subheader row?
             $is_sub = ($val === "1" && $c === 0 && isset($r[1]) && $r[1] === "2");
             $style = ($c === 0 || $is_sub) ? ' ss:StyleID="cellCenter"' : ' ss:StyleID="cell"';
             // Numeric? (tapi bukan kode yang diawali 0 atau terlalu panjang)
-            if ($val !== '' && is_numeric($val) && !str_starts_with($val, '0') && strlen($val) < 15) {
+            if (!$forceStr && $val !== '' && is_numeric($val) && !str_starts_with($val, '0') && strlen($val) < 15) {
                 echo '<Cell' . $style . '><Data ss:Type="Number">' . htmlspecialchars($val, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</Data></Cell>' . "\n";
             } else {
                 echo '<Cell' . $style . '><Data ss:Type="String">' . htmlspecialchars($val, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</Data></Cell>' . "\n";

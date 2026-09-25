@@ -389,7 +389,7 @@ $kkpr_cond = hasRole('Admin', 'Pimpinan') ? "WHERE 1=1" : "WHERE h.created_by = 
 if ($fTahun !== '') {
     $kkpr_cond .= " AND h.tahun = '" . $db->real_escape_string($fTahun) . "'";
 }
-$kkprList  = $db->query("SELECT h.id,h.tahun,h.unit_pemilik_risiko,h.nama_pemilik_risiko, u.nama AS nama_creator FROM kkpr_header h LEFT JOIN users u ON h.created_by = u.id $kkpr_cond ORDER BY h.tahun DESC, h.id DESC")->fetch_all(MYSQLI_ASSOC) ?: [];
+$kkprList  = $db->query("SELECT h.id,h.tahun,h.unit_pemilik_risiko,h.nama_pemilik_risiko, u.nama AS nama_creator, (SELECT COUNT(*) FROM kkpr_risiko r WHERE r.id_kkpr = h.id) AS jml_detail FROM kkpr_header h LEFT JOIN users u ON h.created_by = u.id $kkpr_cond ORDER BY h.tahun DESC, h.id DESC")->fetch_all(MYSQLI_ASSOC) ?: [];
 
 // Master risiko untuk dropdown auto-fill (semua yang aktif)
 $risikoCond = (function_exists('canAccessAllRecords') && canAccessAllRecords()) || hasRole('Admin', 'Pimpinan') ? "" : " AND id_user_input = " . (int)$_SESSION['user_id'];
@@ -599,6 +599,15 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
           </form>
           <?php endif; ?>
         </div>
+        <?php if((int)($kl['jml_detail'] ?? 0) === 0): ?>
+        <div style="background:#fef9c3;border:1px solid #fde047;color:#854d0e;padding:6px 12px;border-radius:8px;font-size:.75rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-exclamation-circle"></i> Belum lengkap — risiko belum diisi (0 risiko)
+        </div>
+        <?php else: ?>
+        <div style="background:#dcfce7;border:1px solid #bbf7d0;color:#166534;padding:6px 12px;border-radius:8px;font-size:.75rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-check-circle"></i> <?= (int)$kl['jml_detail'] ?> risiko dinilai
+        </div>
+        <?php endif; ?>
         <h3 style="font-size:1.15rem;font-weight:700;margin-bottom:8px;color:var(--text);line-height:1.4">
           <?= xss(mb_substr($kl['unit_pemilik_risiko']??'Unit Belum Ditentukan',0,50)) ?><?= mb_strlen($kl['unit_pemilik_risiko']??'')>50?'...':'' ?>
         </h3>
@@ -617,6 +626,17 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
   </div>
   <?php endif; ?>
 <?php else: ?>
+
+<!-- Badge Status Penilaian Risiko Aktif -->
+<?php if(count($rows) === 0): ?>
+<div style="background:#fef9c3;border:1px solid #fde047;color:#854d0e;padding:8px 14px;border-radius:8px;font-size:.8rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+  <i class="fas fa-exclamation-circle"></i> Belum lengkap — risiko belum diisi (0 risiko)
+</div>
+<?php else: ?>
+<div style="background:#dcfce7;border:1px solid #bbf7d0;color:#166534;padding:8px 14px;border-radius:8px;font-size:.8rem;font-weight:700;margin-bottom:14px;display:inline-flex;align-items:center;gap:8px">
+  <i class="fas fa-check-circle"></i> <?= count($rows) ?> risiko dinilai
+</div>
+<?php endif; ?>
 
 <!-- Tabs KKPR -->
 <div class="tabs" style="margin-bottom:16px;">
@@ -791,57 +811,52 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
     </div>
   </div>
   <div class="table-responsive">
-    <table class="data-table profil-detail-table kkpr-data-table no-datatable" id="tableKkpr">
+    <table class="data-table kkpr-data-table no-datatable" id="tableKkpr">
       <colgroup>
         <col class="col-no"><col class="col-code"><col class="col-risk">
         <col class="col-text"><col class="col-source"><col class="col-small"><col class="col-text">
-        <col class="col-control"><col class="col-small"><col class="col-small"><col class="col-score"><col class="col-score"><col class="col-weight"><col class="col-score"><col class="col-level"><col class="col-priority">
+        <col class="col-control"><col class="col-small">
+        <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
         <col class="col-choice"><col class="col-choice"><col class="col-control"><col class="col-schedule">
-        <col class="col-score"><col class="col-score"><col class="col-weight"><col class="col-score"><col class="col-level"><col class="col-action">
+        <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
+        <?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?>
       </colgroup>
       <thead>
         <tr>
-          <th class="sticky-col sticky-left-1" rowspan="3">No</th>
-          <th class="sticky-col sticky-left-2" rowspan="3">Kode</th>
-          <th class="sticky-col sticky-left-3" rowspan="3" style="min-width:130px">Risiko</th>
-          <th colspan="4">IDENTIFIKASI RISIKO</th>
-          <th colspan="8">ANALISIS RISIKO</th>
-          <th colspan="3">EVALUASI RISIKO</th>
-          <th colspan="2">RPR</th>
-          <th colspan="5">TARGET</th>
-          <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="3">Aksi</th><?php endif; ?>
+          <th rowspan="2" class="col-no" style="text-align:center">No</th>
+          <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
+          <th rowspan="2" class="col-risk" style="min-width:140px">Risiko</th>
+          <th colspan="4" style="text-align:center;background:#f1f5f9;color:#334155;border-bottom:1px solid #cbd5e1">IDENTIFIKASI RISIKO</th>
+          <th colspan="6" style="text-align:center;background:#e2e8f0;color:#1e3a8a;border-bottom:1px solid #cbd5e1">ANALISIS RISIKO</th>
+          <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a">EVALUASI RISIKO</th>
+          <th colspan="2" style="text-align:center;background:#e0e7ff;color:#3730a3;border-bottom:1px solid #c7d2fe">RPR</th>
+          <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;border-bottom:1px solid #bbf7d0">TARGET</th>
+          <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
         <tr>
-          <th rowspan="2">Sebab</th>
-          <th rowspan="2">Sumber Risiko</th>
-          <th rowspan="2">C/UC</th>
-          <th rowspan="2">Dampak</th>
-          <th colspan="3">PENGENDALIAN YANG ADA</th>
-          <th rowspan="2">P</th>
-          <th rowspan="2">D</th>
-          <th rowspan="2">Bobot</th>
-          <th rowspan="2">Nilai</th>
-          <th rowspan="2">Tingkat</th>
-          <th rowspan="2">Prioritas</th>
-          <th rowspan="2">Selera Risiko</th>
-          <th rowspan="2">Pilihan Penanganan</th>
-          <th rowspan="2">Uraian</th>
-          <th rowspan="2">Jadwal Pelaksanaan</th>
-          <th rowspan="2">P&darr;</th>
-          <th rowspan="2">D&darr;</th>
-          <th rowspan="2">Bobot&darr;</th>
-          <th rowspan="2">Nilai&darr;</th>
-          <th rowspan="2">Tingkat&darr;</th>
-        </tr>
-        <tr>
-          <th style="min-width:100px">Uraian</th>
-          <th>Efektif</th>
-          <th>Tidak Efektif</th>
+          <th style="min-width:120px">Sebab</th>
+          <th style="width:75px;text-align:center">Sumber</th>
+          <th style="width:48px;text-align:center">C/UC</th>
+          <th style="min-width:120px">Dampak</th>
+          <th style="min-width:120px">Uraian Pengendalian</th>
+          <th style="width:75px;text-align:center">Efektivitas</th>
+          <th style="width:32px;text-align:center" title="Probabilitas">P</th>
+          <th style="width:32px;text-align:center" title="Dampak">D</th>
+          <th style="width:52px;text-align:center" title="Nilai &amp; Bobot">Nilai<br><span style="font-size:.6rem;font-weight:normal;color:#475569">(Bobot)</span></th>
+          <th style="width:80px;text-align:center">Tingkat</th>
+          <th style="width:85px;text-align:center">Selera Risiko</th>
+          <th style="width:95px;text-align:center">Pilihan Penanganan</th>
+          <th style="min-width:120px">Uraian</th>
+          <th style="width:110px">Jadwal</th>
+          <th style="width:32px;text-align:center" title="Target Probabilitas">P&darr;</th>
+          <th style="width:32px;text-align:center" title="Target Dampak">D&darr;</th>
+          <th style="width:52px;text-align:center" title="Target Nilai &amp; Bobot">Nilai&darr;<br><span style="font-size:.6rem;font-weight:normal;color:#166534">(Bobot)</span></th>
+          <th style="width:80px;text-align:center">Tingkat&darr;</th>
         </tr>
       </thead>
       <tbody>
       <?php if(empty($rows)): ?>
-      <tr><td colspan="26"><div class="empty-state"><i class="fas fa-table"></i><h3>Belum ada data</h3></div></td></tr>
+      <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 22 : 21 ?>"><div class="empty-state"><i class="fas fa-table"></i><h3>Belum ada data</h3></div></td></tr>
       <?php else: ?>
       <?php foreach($rows as $r):
         $bgT  = kkprBg($r['tingkat_risiko']??'Rendah');
@@ -851,62 +866,76 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         $bgEv = $r['evaluasi_warna'] ? $r['evaluasi_warna'] : $bgT;
       ?>
       <tr>
-        <td class="sticky-col sticky-left-1" style="text-align:center"><?= $r['no_urut'] ?></td>
-        <td class="sticky-col sticky-left-2"><code style="font-size:.72rem;color:var(--accent)"><?= xss($r['kode_risiko']??'-') ?></code></td>
-        <td class="sticky-col sticky-left-3" style="min-width:150px"><span style="font-size:.76rem"><?= xss($r['nama_risiko']??'') ?></span></td>
-        <td style="font-size:.72rem;min-width:120px;text-align:left!important"><?= formatUraianList($r['sebab'] ?? '') ?: '-' ?></td>
-          <td style="text-align:center"><span class="badge badge-secondary" style="font-size:.68rem"><?= xss(normalizeSumberRisiko($r['sumber'] ?? '')) ?></span></td>
-        <td style="text-align:center"><span class="badge badge-info" style="font-size:.68rem"><?= xss($r['c_uc']??'-') ?></span></td>
-        <td style="font-size:.72rem;min-width:120px;text-align:left!important"><?= xss($r['dampak_uraian']??'') ?: '-' ?></td>
-        <td style="font-size:.72rem;min-width:120px;text-align:left!important"><?= xss($r['pengendalian_uraian']??'') ?: '-' ?></td>
-        <td style="text-align:center;font-weight:700"><?= ($r['pengendalian_efektivitas']??'')==='E'?'V':'' ?></td>
-        <td style="text-align:center;font-weight:700"><?= in_array($r['pengendalian_efektivitas']??'',['TE','BE'])?'V':'' ?></td>
+        <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $r['no_urut'] ?></td>
+        <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko']??'-') ?></span></td>
+        <td style="min-width:140px;line-height:1.35;font-weight:600;color:var(--text-main)"><?= xss($r['nama_risiko']??'') ?></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= formatUraianList($r['sebab'] ?? '') ?: '-' ?></td>
+        <td style="text-align:center"><span class="badge badge-secondary" style="font-size:.68rem;padding:2px 6px"><?= xss(normalizeSumberRisiko($r['sumber'] ?? '')) ?></span></td>
+        <td style="text-align:center"><span class="badge badge-info" style="font-size:.68rem;padding:2px 6px"><?= xss($r['c_uc']??'-') ?></span></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['dampak_uraian']??'') ?: '-' ?></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['pengendalian_uraian']??'') ?: '-' ?></td>
+        <td style="text-align:center">
+          <?php if(($r['pengendalian_efektivitas']??'')==='E'): ?>
+            <span class="badge badge-success" style="font-size:.68rem;padding:2px 6px">Efektif</span>
+          <?php elseif(in_array($r['pengendalian_efektivitas']??'',['TE','BE'])): ?>
+            <span class="badge badge-danger" style="font-size:.68rem;padding:2px 6px">Tdk Efektif</span>
+          <?php else: ?>
+            <span style="color:var(--text-muted)">-</span>
+          <?php endif; ?>
+        </td>
         <td style="text-align:center;font-weight:700"><?= $r['probabilitas'] ?></td>
         <td style="text-align:center;font-weight:700"><?= $r['dampak_level'] ?></td>
-        <td style="text-align:center;font-weight:700"><?= $r['bobot'] ?></td>
-        <td style="text-align:center;font-weight:800;color:var(--accent)"><?= round((float)$r['nilai_risiko']) ?></td>
-        <td style="text-align:center"><span style="background:<?= $bgT ?>;color:<?= $clT ?>;padding:2px 6px;border-radius:8px;font-weight:700;font-size:.7rem;white-space:nowrap"><?= xss($r['tingkat_risiko']??'-') ?></span></td>
-        <td style="text-align:center;font-weight:700"><?= $r['prioritas_risiko']?:'-' ?></td>
-        <td style="font-size:.68rem;text-align:center;font-weight:700;<?php
+        <td style="text-align:center">
+          <div style="font-weight:700;font-size:.82rem;line-height:1.1"><?= round((float)$r['nilai_risiko']) ?></div>
+          <div style="font-size:.66rem;color:var(--accent);font-weight:600;margin-top:1px" title="Bobot"><?= $r['bobot'] ?></div>
+        </td>
+        <td style="text-align:center">
+          <span style="background:<?= $bgT ?>;color:<?= $clT ?>;padding:3px 7px;border-radius:10px;font-weight:700;font-size:.68rem;display:inline-block;white-space:nowrap"><?= xss($r['tingkat_risiko']??'-') ?></span>
+        </td>
+        <td style="text-align:center;font-size:.68rem;font-weight:700;<?php
           $sr=$r['selera_risiko']??'';
-          if(str_contains($sr,'Dalam')) echo 'color:#000000;background:#FFFF00;';
-          elseif(str_contains($sr,'Diatas')) echo 'color:#ffffff;background:#ED7D31;';
+          if(str_contains($sr,'Dalam')) echo 'color:#000000;background:#FFFF00;padding:2px 4px;border-radius:4px;';
+          elseif(str_contains($sr,'Diatas')) echo 'color:#ffffff;background:#ED7D31;padding:2px 4px;border-radius:4px;';
         ?>"><?= xss($sr?:'-') ?></td>
-        <td style="font-size:.72rem;<?php
+        <td style="text-align:center;font-size:.68rem;<?php
           $pp = $r['pilihan_penanganan'] ?? '';
-          if (str_contains($pp,'Menerima')) echo 'background:#FFFF00;color:#000000;font-weight:700;';
-          elseif (str_contains($pp,'Mitigasi')) echo 'background:#FF0000;color:#ffffff;font-weight:700;';
+          if (str_contains($pp,'Menerima')) echo 'background:#FFFF00;color:#000000;font-weight:700;padding:2px 4px;border-radius:4px;';
+          elseif (str_contains($pp,'Mitigasi')) echo 'background:#FF0000;color:#ffffff;font-weight:700;padding:2px 4px;border-radius:4px;';
         ?>"><?= xss($pp?:'-') ?></td>
-        <td style="font-size:.72rem;min-width:120px;text-align:left!important"><?= xss($r['rpti_uraian']??'') ?: '-' ?></td>
-        <td style="font-size:.72rem;min-width:120px;"><?= xss($r['rpti_jadwal']??'') ?: '-' ?></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['rpti_uraian']??'') ?: '-' ?></td>
+        <td style="font-size:.70rem;line-height:1.3;"><?= xss($r['rpti_jadwal']??'') ?: '-' ?></td>
         <td style="text-align:center;font-weight:700"><?= $r['target_p'] ?></td>
         <td style="text-align:center;font-weight:700"><?= $r['target_d'] ?></td>
-        <td style="text-align:center;font-weight:700"><?= $r['target_bobot'] ?></td>
-        <td style="text-align:center;font-weight:800;color:var(--success)"><?= round((float)$r['target_nilai']) ?></td>
-        <td style="text-align:center"><span style="background:<?= $bgTT ?>;color:<?= $clTT ?>;padding:2px 6px;border-radius:8px;font-weight:700;font-size:.7rem;white-space:nowrap"><?= xss($r['target_tingkat']??'-') ?></span></td>
+        <td style="text-align:center">
+          <div style="font-weight:700;font-size:.82rem;line-height:1.1;color:var(--success)"><?= round((float)$r['target_nilai']) ?></div>
+          <div style="font-size:.66rem;color:#16a34a;font-weight:600;margin-top:1px" title="Target Bobot"><?= $r['target_bobot'] ?></div>
+        </td>
+        <td style="text-align:center">
+          <span style="background:<?= $bgTT ?>;color:<?= $clTT ?>;padding:3px 7px;border-radius:10px;font-weight:700;font-size:.68rem;display:inline-block;white-space:nowrap"><?= xss($r['target_tingkat']??'-') ?></span>
+        </td>
         <?php if(hasRole('Admin','Risk Manager')): ?>
-           <td class="kkpr-action-cell">
-              <div class="act-btn-group">
-              <?php if($isLockedKkpr): ?>
-                  <button type="button" class="act-btn act-btn-view" onclick='editKkprRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Lihat detail"><i class="fas fa-eye"></i></button>
-                  <form method="POST" style="display:contents;"><?= csrfField() ?>
-                    <input type="hidden" name="aksi" value="hapus_risiko">
-                    <input type="hidden" name="id_risiko_row" value="<?= $r['id'] ?>">
-                    <input type="hidden" name="id_kkpr" value="<?= $activeId ?>">
-                    <button type="submit" class="act-btn act-btn-delete" title="Hapus risiko" onclick="return confirm('KKPR sedang terkunci. Hapus risiko ini juga?')"><i class="fas fa-trash"></i></button>
-                  </form>
-              <?php else: ?>
-                  <button type="button" class="act-btn act-btn-edit" onclick='editKkprRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Edit risiko"><i class="fas fa-edit"></i></button>
-                  <form method="POST" style="display:contents;"><?= csrfField() ?>
-                    <input type="hidden" name="aksi" value="hapus_risiko">
-                    <input type="hidden" name="id_risiko_row" value="<?= $r['id'] ?>">
-                    <input type="hidden" name="id_kkpr" value="<?= $activeId ?>">
-                    <button type="submit" class="act-btn act-btn-delete" title="Hapus risiko" onclick="return confirm('Hapus?')"><i class="fas fa-trash"></i></button>
-                  </form>
-              <?php endif; ?>
-             </div>
-           </td>
+        <td class="kkpr-action-cell" style="text-align:center;white-space:nowrap">
+          <div class="act-btn-group" style="justify-content:center">
+          <?php if($isLockedKkpr): ?>
+              <button type="button" class="act-btn act-btn-view" onclick='editKkprRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Lihat detail"><i class="fas fa-eye"></i></button>
+              <form method="POST" style="display:contents;"><?= csrfField() ?>
+                <input type="hidden" name="aksi" value="hapus_risiko">
+                <input type="hidden" name="id_risiko_row" value="<?= $r['id'] ?>">
+                <input type="hidden" name="id_kkpr" value="<?= $activeId ?>">
+                <button type="submit" class="act-btn act-btn-delete" title="Hapus risiko" onclick="return confirm('KKPR sedang terkunci. Hapus risiko ini juga?')"><i class="fas fa-trash"></i></button>
+              </form>
+          <?php else: ?>
+              <button type="button" class="act-btn act-btn-edit" onclick='editKkprRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Edit risiko"><i class="fas fa-edit"></i></button>
+              <form method="POST" style="display:contents;"><?= csrfField() ?>
+                <input type="hidden" name="aksi" value="hapus_risiko">
+                <input type="hidden" name="id_risiko_row" value="<?= $r['id'] ?>">
+                <input type="hidden" name="id_kkpr" value="<?= $activeId ?>">
+                <button type="submit" class="act-btn act-btn-delete" title="Hapus risiko" onclick="return confirm('Hapus?')"><i class="fas fa-trash"></i></button>
+              </form>
           <?php endif; ?>
+          </div>
+        </td>
+        <?php endif; ?>
       </tr>
       <?php endforeach; ?>
       <?php endif; ?>

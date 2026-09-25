@@ -270,44 +270,49 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
     </div>
   </div>
   <div class="table-responsive">
-    <table class="data-table ikk-data-table no-datatable" id="tableIkk">
-      <colgroup><col class="col-no"><col class="col-wide"><col class="col-wide"><col class="col-indicator"><col class="col-target"><col class="col-person"><col class="col-note"><col class="col-action"></colgroup>
+    <table class="data-table profil-detail-table ikk-data-table no-datatable" id="tableIkk">
+      <colgroup><col class="col-no"><col class="col-wide"><col class="col-wide"><col class="col-indicator"><col class="col-target"><col class="col-person"><col class="col-note"><?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?></colgroup>
       <thead>
         <tr>
-          <th style="width:40px;text-align:center">No</th>
-          <th>Tujuan</th>
-          <th>Sasaran</th>
-          <th>Indikator Kinerja</th>
-          <th>Target</th>
-          <th>Penanggung Jawab</th>
-          <th>Keterangan</th>
-          <?php if(hasRole('Admin','Risk Manager')): ?><th style="width:80px;text-align:center">Aksi</th><?php endif; ?>
+          <th class="col-no" style="text-align:center">No</th>
+          <th class="col-wide">Tujuan</th>
+          <th class="col-wide">Sasaran</th>
+          <th class="col-indicator">Indikator Kinerja</th>
+          <th class="col-target">Target</th>
+          <th class="col-person">Penanggung Jawab</th>
+          <th class="col-note">Keterangan</th>
+          <?php if(hasRole('Admin','Risk Manager')): ?><th class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
       </thead>
       <tbody>
       <?php if(empty($rows)): ?>
-        <tr><td colspan="8">
-          <div class="empty-state" style="padding:40px">
-            <i class="fas fa-clipboard-check" style="font-size:2.5rem;opacity:.3;margin-bottom:12px;display:block"></i>
-            <h3>Belum ada data IKK tahun <?= xss($tahunAktif) ?></h3>
+        <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 8 : 7 ?>">
+          <div class="empty-state" style="padding:32px">
+            <i class="fas fa-clipboard-check" style="font-size:2rem;opacity:.35;margin-bottom:8px;display:block"></i>
+            <h3 style="font-size:1rem;margin:0 0 4px">Belum ada data IKK tahun <?= xss($tahunAktif) ?></h3>
             <?php if(hasRole('Admin','Risk Manager')): ?>
-            <p style="margin-top:8px;color:var(--text-muted)">Klik "Tambah IKK" untuk menambahkan data.</p>
-            <button class="btn btn-primary" style="margin-top:16px" onclick="openModal('modalIkk')"><i class="fas fa-plus"></i> Tambah IKK</button>
+            <p style="margin:4px 0 12px;color:var(--text-muted);font-size:.75rem">Klik "Tambah IKK" untuk menambahkan data.</p>
+            <button class="btn btn-primary" onclick="openModal('modalIkk')"><i class="fas fa-plus"></i> Tambah IKK</button>
             <?php endif; ?>
           </div>
         </td></tr>
       <?php else: ?>
         <?php foreach($rows as $i => $r): ?>
         <tr>
-          <td style="text-align:center;color:var(--text-muted)"><?= $i+1 ?></td>
-          <td style="font-size:.83rem"><?= xss($r['tujuan']??'-') ?></td>
-          <td style="font-size:.83rem"><?= xss($r['sasaran']??'-') ?></td>
-          <td style="font-size:.83rem"><?= xss($r['indikator_kinerja']??'-') ?></td>
-          <td style="font-size:.83rem"><?= xss($r['target']??'-') ?></td>
-          <td style="font-size:.83rem"><?= xss($r['penanggung_jawab']??'-') ?></td>
-          <td style="font-size:.83rem;color:var(--text-muted)"><?= xss($r['keterangan']??'-') ?></td>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $i+1 ?></td>
+          <td><?= xss($r['tujuan']??'-') ?></td>
+          <td><?= xss($r['sasaran']??'-') ?></td>
+          <td><?= xss($r['indikator_kinerja']??'-') ?></td>
+          <td><div style="font-weight:600;color:var(--text-main)"><?= xss($r['target']??'-') ?></div></td>
+          <td>
+            <div style="font-weight:500;font-size:.74rem;display:flex;align-items:flex-start;gap:4px">
+              <i class="fas fa-user-tie" style="font-size:.68rem;color:var(--primary);opacity:.8;margin-top:2px;flex-shrink:0"></i>
+              <span><?= xss($r['penanggung_jawab']??'-') ?></span>
+            </div>
+          </td>
+          <td style="color:var(--text-muted)"><?= xss($r['keterangan']??'-') ?></td>
           <?php if(hasRole('Admin','Risk Manager')): ?>
-          <td class="ikk-action-cell">
+          <td class="ikk-action-cell" style="text-align:center;white-space:nowrap">
             <div class="act-btn-group">
               <button class="act-btn act-btn-edit" onclick='editIkk(<?= htmlspecialchars(json_encode($r),ENT_QUOTES) ?>)' title="Edit"><i class="fas fa-edit"></i></button>
               <form method="POST" style="display:inline"><?= csrfField() ?>

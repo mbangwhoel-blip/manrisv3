@@ -153,32 +153,60 @@ $risikoId = (int)($_GET['risiko_id'] ?? 0);
 $saranAwal = xss($_GET['saran'] ?? '');
 $export = $_GET['export'] ?? '';
 
-// Data risiko untuk dropdown
-// Data risiko untuk dropdown
-$mitigasi_cond = hasRole('Admin', 'Pimpinan') ? "" : "WHERE id_user_input = " . (int)$_SESSION['user_id'];
-$risikoList = $db->query("SELECT id, kode_risiko, nama_risiko FROM risiko $mitigasi_cond ORDER BY skor_risiko DESC")->fetch_all(MYSQLI_ASSOC) ?: [];
+// Data risiko untuk dropdown (hanya risiko aktif, bukan yang terhapus)
+$mitigasi_cond = 'WHERE deleted_at IS NULL';
+if (!hasRole('Admin', 'Pimpinan')) $mitigasi_cond .= ' AND id_user_input = ' . (int)$_SESSION['user_id'];
+$risikoList = $db->query("SELECT id, kode_risiko, nama_risiko FROM risiko $mitigasi_cond ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
 
 $risikoDetail = null;
 $mitigasiRows = [];
 
 if ($risikoId) {
     $scope = hasRole('Admin', 'Pimpinan') ? '' : ' AND r.id_user_input = ?';
-    $s = $db->prepare('SELECT r.*, r.sumber AS kategori_nama FROM risiko r WHERE r.id=?'.$scope);
+    $s = $db->prepare('SELECT r.*, r.sumber AS kategori_nama FROM risiko r WHERE r.id=? AND r.deleted_at IS NULL'.$scope);
     if ($scope) { $uid = (int)$_SESSION['user_id']; $s->bind_param('ii',$risikoId,$uid); } else $s->bind_param('i',$risikoId);
     $s->execute();
     $risikoDetail = $s->get_result()->fetch_assoc(); $s->close();
 
-    $s2 = $db->prepare('SELECT m.*, r.nama_risiko, r.kode_risiko, r.level_risiko FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id WHERE m.id_risiko=? ORDER BY m.deadline ASC');
+    $s2 = $db->prepare('SELECT m.*, r.nama_risiko, r.kode_risiko, r.level_risiko FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id WHERE m.id_risiko=? AND r.deleted_at IS NULL ORDER BY m.deadline ASC');
     $s2->bind_param('i',$risikoId); $s2->execute();
     $mitigasiRows = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 } else {
-    $mitigasi_cond_and = hasRole('Admin', 'Pimpinan') ? "" : "WHERE r.id_user_input = " . (int)$_SESSION['user_id'];
+    $mitigasi_cond_and = 'WHERE r.deleted_at IS NULL';
+    if (!hasRole('Admin', 'Pimpinan')) $mitigasi_cond_and .= ' AND r.id_user_input = ' . (int)$_SESSION['user_id'];
     $mitigasiRows = $db->query("
         SELECT m.*, r.nama_risiko, r.kode_risiko, r.level_risiko
         FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id
         $mitigasi_cond_and
-        ORDER BY m.deadline ASC LIMIT 200
+        ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.kode_risiko ASC, m.deadline ASC
+        LIMIT 200
     ")->fetch_all(MYSQLI_ASSOC) ?: [];
+}
+
+// ── Penomoran bertingkat per risiko (mis. 1.1, 1.2) ───────────
+// Satu nomor induk per risiko, sub-nomor per aksi. Dipakai untuk
+// tampilan tabel, ekspor Excel, dan cetak/PDF.
+$mitGroup    = [];
+$mitColCount = $risikoId ? 9 : 10;
+if (!empty($mitigasiRows)) {
+    $n = count($mitigasiRows);
+    $tmp = [];
+    $seq = 0; $prevRid = null; $sub = 0;
+    foreach ($mitigasiRows as $m) {
+        $rid = (int)($m['id_risiko'] ?? 0);
+        if ($rid !== $prevRid) { $seq++; $sub = 0; $prevRid = $rid; }
+        $sub++;
+        $tmp[] = ['g' => $seq, 's' => $sub];
+    }
+    for ($i = 0; $i < $n; $i++) {
+        $first = ($i === 0) || ($tmp[$i]['g'] !== $tmp[$i - 1]['g']);
+        $span  = 0;
+        if ($first) {
+            $span = 1;
+            for ($j = $i + 1; $j < $n && $tmp[$j]['g'] === $tmp[$i]['g']; $j++) $span++;
+        }
+        $mitGroup[$i] = ['no' => $tmp[$i]['g'] . '.' . $tmp[$i]['s'], 'span' => $span, 'first' => $first];
+    }
 }
 
 // ── Export Excel ──────────────────────────────────────────────
@@ -186,10 +214,11 @@ if ($export === 'excel') {
     $headers = ['No', 'Kode Risiko', 'Nama Risiko', 'Level', 'Aksi Mitigasi', 'PIC', 'Deadline', 'Status', 'Biaya', 'Catatan', 'Tgl Input'];
     $excelRows = [];
     foreach ($mitigasiRows as $i => $m) {
+        $grp = $mitGroup[$i] ?? ['no' => $i + 1, 'first' => true];
         $excelRows[] = [
-            $i + 1,
-            $m['kode_risiko'] ?? '',
-            $m['nama_risiko'] ?? '',
+            ['v' => $grp['no']],
+            $grp['first'] ? ($m['kode_risiko'] ?? '') : '',
+            $grp['first'] ? ($m['nama_risiko'] ?? '') : '',
             $m['level_risiko'] ?? '',
             $m['aksi'] ?? '',
             $m['pic'] ?? '',
@@ -292,12 +321,15 @@ tr:nth-child(even) td{background:#f8fafc}
           'Terlambat' => 'b-rj',
           default => 'b-st',
         };
+        $grp = $mitGroup[$i] ?? ['no' => $i + 1, 'span' => 1, 'first' => true];
       ?>
     <tr>
-      <td class="center"><?= $i + 1 ?></td>
-      <td class="center"><code><?= xss($m['kode_risiko'] ?? '') ?></code></td>
-      <td><?= xss($m['nama_risiko'] ?? '') ?></td>
-      <td class="center"><?= xss($m['level_risiko'] ?? '-') ?></td>
+      <td class="center"><?= $grp['no'] ?></td>
+      <?php if ($grp['first']): ?>
+      <td class="center" rowspan="<?= $grp['span'] ?>"><code><?= xss($m['kode_risiko'] ?? '') ?></code></td>
+      <td rowspan="<?= $grp['span'] ?>"><?= xss($m['nama_risiko'] ?? '') ?></td>
+      <td class="center" rowspan="<?= $grp['span'] ?>"><?= xss($m['level_risiko'] ?? '-') ?></td>
+      <?php endif; ?>
       <td><?= xss($m['aksi'] ?? '') ?></td>
       <td class="center"><?= xss($m['pic'] ?? '-') ?></td>
       <td class="center" style="white-space:nowrap"><?= !empty($m['deadline']) ? tglIndo($m['deadline']) : '-' ?></td>
@@ -427,52 +459,92 @@ $mitStatLink = APP_URL . '/?page=mitigasi' . ($risikoId ? '&risiko_id=' . $risik
     </div>
   </div>
   <div class="table-responsive">
-    <table class="data-table no-datatable" id="tableMitigasi">
+    <table class="data-table profil-detail-table mitigasi-data-table no-datatable" id="tableMitigasi">
+      <colgroup>
+        <col style="width:36px">
+        <?php if(!$risikoId): ?><col style="min-width:200px"><?php endif; ?>
+        <col style="min-width:200px">
+        <col style="width:140px">
+        <col style="width:105px">
+        <col style="width:100px">
+        <col style="width:90px">
+        <col style="width:48px">
+        <col style="width:48px">
+        <col style="width:75px">
+      </colgroup>
       <thead>
         <tr>
-          <th style="width:40px">No</th>
+          <th style="width:36px;text-align:center">No</th>
           <?php if(!$risikoId): ?><th>Risiko</th><?php endif; ?>
-          <th>Aksi Mitigasi</th><th>PIC</th><th>Deadline</th><th>Status</th><th>Biaya</th><th>Bukti</th><th>TTD</th><th>Aksi</th>
+          <th>Aksi Mitigasi</th>
+          <th>PIC</th>
+          <th style="text-align:center">Deadline</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:center">Biaya</th>
+          <th style="text-align:center">Bukti</th>
+          <th style="text-align:center">TTD</th>
+          <th style="text-align:center">Aksi</th>
         </tr>
       </thead>
       <tbody>
       <?php if(empty($mitigasiRows)): ?>
-        <tr><td colspan="10"><div class="empty-state"><i class="fas fa-tasks"></i><h3>Belum ada mitigasi</h3><p>Klik "Tambah Mitigasi" untuk menambahkan aksi penanganan risiko</p></div></td></tr>
+        <tr><td colspan="<?= $mitColCount ?>"><div class="empty-state" style="padding:32px"><i class="fas fa-tasks" style="font-size:2rem;opacity:.35;margin-bottom:8px;display:block"></i><h3 style="font-size:1rem;margin:0 0 4px">Belum ada mitigasi</h3><p style="margin:4px 0 0;color:var(--text-muted);font-size:.75rem">Klik "Tambah Mitigasi" untuk menambahkan aksi penanganan risiko</p></div></td></tr>
       <?php else: ?>
-        <?php $no = 1; foreach($mitigasiRows as $m): ?>
+        <?php foreach($mitigasiRows as $idx => $m): ?>
         <?php
           $overdue = $m['status']!=='Selesai' && strtotime($m['deadline']) < time();
           $rowStyle = $overdue ? 'background:rgba(220,38,38,.04)' : '';
           $statusMit = ['Belum Mulai'=>'badge-secondary','Sedang Berjalan'=>'badge-info','Selesai'=>'badge-success','Terlambat'=>'badge-danger'];
+          $grp = $mitGroup[$idx] ?? ['no' => $idx + 1, 'span' => 1, 'first' => true];
+          $riskStyle = 'min-width:140px' . ($grp['first'] ? '' : ';display:none');
         ?>
         <tr style="<?= $rowStyle ?>">
-          <td style="color:var(--text-muted)"><?= $no++ ?></td>
+          <td style="text-align:center;font-weight:600;color:var(--text-muted);white-space:nowrap"><?= xss($grp['no']) ?></td>
           <?php if(!$risikoId): ?>
-          <td style="min-width:140px"><a href="?page=mitigasi&risiko_id=<?= $m['id_risiko'] ?>" style="font-size:.83rem;font-weight:600;color:var(--accent)"><?= xss($m['kode_risiko']) ?></a><br><div style="font-size:.83rem;color:var(--text)"><?= xss($m['nama_risiko']) ?></div></td>
-          <?php endif; ?>
-          <td style="min-width:200px"><div style="font-size:.83rem"><?= xss($m['aksi']) ?></div>
-            <?php if($m['catatan']): ?><small style="color:var(--text-muted)"><?= xss($m['catatan']) ?></small><?php endif; ?>
+          <td class="risk-cell" data-risk="<?= (int)$m['id_risiko'] ?>"<?= $grp['first'] ? ' rowspan="'.$grp['span'].'"' : '' ?> style="<?= $riskStyle ?>">
+            <a href="?page=mitigasi&risiko_id=<?= $m['id_risiko'] ?>" style="text-decoration:none;display:inline-block;margin-bottom:3px">
+              <span class="badge-kode-risiko"><?= xss($m['kode_risiko']) ?></span>
+            </a>
+            <div style="font-weight:600;color:var(--text-main);line-height:1.35"><?= xss($m['nama_risiko']) ?></div>
+            <?php if(!empty($m['level_risiko'])): ?>
+            <div style="margin-top:3px"><?= badgeLevel($m['level_risiko']) ?></div>
+            <?php endif; ?>
           </td>
-          <td style="font-weight:600;font-size:.83rem"><?= xss($m['pic']) ?></td>
+          <?php endif; ?>
+          <td style="min-width:180px">
+            <div style="font-weight:600;color:var(--text-main);line-height:1.35"><?= xss($m['aksi']) ?></div>
+            <?php if($m['catatan']): ?><div style="font-size:.71rem;color:var(--text-muted);margin-top:2px"><?= xss($m['catatan']) ?></div><?php endif; ?>
+          </td>
           <td>
-            <span style="font-size:.82rem;<?= $overdue?'color:var(--danger);font-weight:700':'' ?>">
-              <?= tglIndo($m['deadline']) ?>
-              <?php if($overdue): ?><br><small><i class="fas fa-exclamation-circle"></i> Terlambat</small><?php endif; ?>
+            <div style="font-weight:500;font-size:.74rem;display:flex;align-items:flex-start;gap:4px">
+              <i class="fas fa-user-tie" style="font-size:.68rem;color:var(--primary);opacity:.8;margin-top:2px"></i>
+              <span><?= xss($m['pic']) ?></span>
+            </div>
+          </td>
+          <td style="text-align:center">
+            <div style="font-size:.74rem;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;<?= $overdue?'color:var(--danger);font-weight:700':'' ?>">
+              <i class="far fa-calendar-alt" style="font-size:.68rem;opacity:.75"></i>
+              <span><?= tglIndo($m['deadline']) ?></span>
+            </div>
+            <?php if($overdue): ?><div style="font-size:.65rem;color:var(--danger);font-weight:700;margin-top:2px"><i class="fas fa-exclamation-circle"></i> Terlambat</div><?php endif; ?>
+          </td>
+          <td style="text-align:center">
+            <span class="badge <?= $statusMit[$m['status']] ?? 'badge-secondary' ?>" style="font-size:.69rem;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+              <?= xss($m['status']) ?>
             </span>
           </td>
-          <td><span class="badge <?= $statusMit[$m['status']] ?? 'badge-secondary' ?>"><?= xss($m['status']) ?></span></td>
-          <td style="font-size:.82rem"><?= $m['biaya']>0 ? rupiah($m['biaya']) : '-' ?></td>
-          <td>
+          <td style="text-align:center;font-size:.74rem"><?= $m['biaya']>0 ? rupiah($m['biaya']) : '-' ?></td>
+          <td style="text-align:center">
             <?php if (!empty($m['bukti_file'])): ?>
             <a href="<?= APP_URL ?>/serve.php?t=bukti&f=<?= urlencode($m['bukti_file']) ?>" target="_blank" class="act-btn act-btn-view" title="Lihat Bukti"><i class="fas fa-paperclip"></i></a>
             <?php else: ?><span style="color:var(--text-muted);font-size:.75rem">-</span><?php endif; ?>
           </td>
-          <td>
+          <td style="text-align:center">
             <?php if($m['ttd_file']): ?>
             <button onclick="lihatTTD('<?= xss($m['ttd_file']) ?>')" class="act-btn act-btn-sign" title="Lihat TTD"><i class="fas fa-signature"></i></button>
             <?php else: ?><span style="color:var(--text-muted);font-size:.75rem">-</span><?php endif; ?>
           </td>
-          <td>
+          <td class="mitigasi-action-cell" style="text-align:center;white-space:nowrap">
             <div class="act-btn-group">
               <button class="act-btn act-btn-edit" onclick="editMitigasi(<?= htmlspecialchars(json_encode($m),ENT_QUOTES) ?>)" title="Edit"><i class="fas fa-edit"></i></button>
               <?php if(hasRole('Admin','Risk Manager')): ?>
@@ -615,6 +687,32 @@ $mitStatLink = APP_URL . '/?page=mitigasi' . ($risikoId ? '&risiko_id=' . $risik
 
 <script>
 const mitigasiState = { page: 1 };
+
+// Gabungkan kolom Risiko (rowspan) untuk baris yang tampil pada halaman ini.
+function relayoutRiskCells(pageRows) {
+  const cells = document.querySelectorAll('#tableMitigasi tbody .risk-cell');
+  cells.forEach(c => { c.style.display = ''; c.removeAttribute('rowspan'); });
+  if (!pageRows || !pageRows.length) return;
+  let i = 0;
+  while (i < pageRows.length) {
+    const cell = pageRows[i].querySelector('.risk-cell');
+    if (!cell) { i++; continue; }
+    const rid = cell.getAttribute('data-risk');
+    let j = i + 1;
+    while (j < pageRows.length) {
+      const c2 = pageRows[j].querySelector('.risk-cell');
+      if (!c2 || c2.getAttribute('data-risk') !== rid) break;
+      j++;
+    }
+    cell.rowSpan = j - i;
+    for (let k = i + 1; k < j; k++) {
+      const c2 = pageRows[k].querySelector('.risk-cell');
+      if (c2) c2.style.display = 'none';
+    }
+    i = j;
+  }
+}
+
 function filterTableMitigasi() {
   const query = (document.getElementById('searchMitigasi')?.value || '').toLowerCase();
   const limit = parseInt(document.getElementById('limitMitigasi')?.value || 10, 10);
@@ -641,7 +739,9 @@ function filterTableMitigasi() {
   const start = (mitigasiState.page - 1) * limit;
 
   allRows.forEach(row => { if(row.id !== 'emptySearchMitigasi' && !row.querySelector('.empty-state')) row.style.display = 'none'; });
-  visible.slice(start, start + limit).forEach(row => { row.style.display = ''; });
+  const pageRows = visible.slice(start, start + limit);
+  pageRows.forEach(row => { row.style.display = ''; });
+  relayoutRiskCells(pageRows);
 
   const infoEl = document.getElementById('mitigasiPageInfo');
   if(infoEl) {
@@ -682,16 +782,18 @@ function filterTableMitigasi() {
   }
 
   // Tampilkan empty state jika tidak ada hasil pencarian
+  const colCount = document.querySelectorAll('#tableMitigasi thead th').length || 9;
   let emptyRow = document.getElementById('emptySearchMitigasi');
   if (count === 0 && allRows.length > 0 && !emptyState) {
+    const emptyHtml = `<td colspan="${colCount}"><div class="empty-state"><i class="fas fa-search"></i><p>Pencarian "<b>${query}</b>" tidak ditemukan.</p></div></td>`;
     if (!emptyRow) {
       emptyRow = document.createElement('tr');
       emptyRow.id = 'emptySearchMitigasi';
-      emptyRow.innerHTML = `<td colspan="8"><div class="empty-state"><i class="fas fa-search"></i><p>Pencarian "<b>${query}</b>" tidak ditemukan.</p></div></td>`;
+      emptyRow.innerHTML = emptyHtml;
       document.querySelector('#tableMitigasi tbody').appendChild(emptyRow);
     } else {
       emptyRow.style.display = '';
-      emptyRow.innerHTML = `<td colspan="8"><div class="empty-state"><i class="fas fa-search"></i><p>Pencarian "<b>${query}</b>" tidak ditemukan.</p></div></td>`;
+      emptyRow.innerHTML = emptyHtml;
     }
   } else {
     if(emptyRow) emptyRow.style.display = 'none';

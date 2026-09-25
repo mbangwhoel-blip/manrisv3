@@ -214,7 +214,7 @@ function buildKkprQuery(string $useUserFilter, $scopeUser, string $fTahun, strin
             JOIN kkpr_header h ON r.id_kkpr = h.id
             LEFT JOIN users u ON h.created_by = u.id
             WHERE $whereStr
-            ORDER BY h.tahun DESC, r.no_urut ASC, r.id ASC
+            ORDER BY h.tahun DESC, SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC, r.id ASC
             $limit";
     return [$sql, $params, $types];
 }
@@ -250,7 +250,7 @@ function buildKkpmrQuery(string $useUserFilter, $scopeUser, string $fTahun, stri
             JOIN kkpr_header h ON r.id_kkpr = h.id
             LEFT JOIN users u ON h.created_by = u.id
             WHERE $whereStr
-            ORDER BY h.tahun DESC, r.no_urut ASC, r.id ASC
+            ORDER BY h.tahun DESC, SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC, r.id ASC
             $limit";
     return [$sql, $params, $types];
 }
@@ -343,9 +343,9 @@ if ($export === 'excel' || $export === 'pdf') {
     $allDocs = [];
     foreach ($headerRows as $hr) {
         if ($tab === 'profil') {
-            $ds = $db->prepare('SELECT * FROM profil_risiko_detail WHERE id_profil=? ORDER BY no_urut, id');
+            $ds = $db->prepare("SELECT * FROM profil_risiko_detail WHERE id_profil=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
         } else {
-            $ds = $db->prepare('SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY no_urut, id');
+            $ds = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
         }
         $ds->bind_param('i', $hr['id']); $ds->execute();
         $details = $ds->get_result()->fetch_all(MYSQLI_ASSOC); $ds->close();
@@ -1200,7 +1200,7 @@ $approvalBadge = match($approvalStatus) {
   </div>
   </div>
   <div class="table-responsive">
-    <table class="data-table no-datatable" id="tableLaporanKonsol">
+    <table class="data-table profil-detail-table no-datatable" id="tableLaporanKonsol">
       <thead>
         <?php if ($tab === 'profil'): ?>
         <tr>
@@ -1241,7 +1241,7 @@ $approvalBadge = match($approvalStatus) {
             <td style="text-align:center;font-size:.78rem"><?= xss($r['tahun'] ?? '') ?></td>
             <?php if ($tab === 'profil'): ?>
               <td style="font-size:.78rem"><?= xss($r['unit_kerja'] ?? '-') ?></td>
-              <td><code style="font-size:.74rem;color:var(--accent)"><?= xss($r['kode_risiko'] ?? '') ?></code></td>
+              <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '') ?></span></td>
               <td style="font-weight:600"><?= xss($r['nama_risiko'] ?? '') ?></td>
               <td style="text-align:center;font-size:.78rem"><?= xss($r['probabilitas'] ?? '') ?></td>
               <td style="text-align:center;font-size:.78rem"><?= formatUraianList($r['dampak'] ?? '') ?></td>
@@ -1251,7 +1251,7 @@ $approvalBadge = match($approvalStatus) {
               <td style="font-size:.74rem"><?= xss($r['penanggungjawab'] ?? '-') ?></td>
             <?php elseif ($tab === 'kkpr'): ?>
               <td style="font-size:.78rem"><?= xss($r['unit_pemilik_risiko'] ?? '-') ?></td>
-              <td><code style="font-size:.74rem;color:var(--accent)"><?= xss($r['kode_risiko'] ?? '') ?></code></td>
+              <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '') ?></span></td>
               <td style="font-weight:600"><?= xss($r['nama_risiko'] ?? '') ?></td>
               <td style="text-align:center;font-size:.74rem"><?= xss(normalizeSumberRisiko($r['sumber'] ?? '')) ?></td>
               <td style="text-align:center;font-size:.74rem"><?= xss($r['c_uc'] ?? '-') ?></td>
@@ -1262,7 +1262,7 @@ $approvalBadge = match($approvalStatus) {
               <td style="font-size:.74rem"><?= xss($r['pilihan_penanganan'] ?? '-') ?></td>
             <?php else: ?>
               <td style="font-size:.78rem"><?= xss($r['unit_pemilik_risiko'] ?? '-') ?></td>
-              <td><code style="font-size:.74rem;color:var(--accent)"><?= xss($r['kode_risiko'] ?? '') ?></code></td>
+              <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '') ?></span></td>
               <td style="font-weight:600"><?= xss($r['nama_risiko'] ?? '') ?></td>
               <td style="text-align:center;font-size:.78rem"><?= xss($r['awal_p'] ?? '') ?></td>
               <td style="text-align:center;font-size:.78rem"><?= xss($r['awal_d'] ?? '') ?></td>

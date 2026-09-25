@@ -244,12 +244,12 @@ final class BotFeaturesTest extends TestCase {
     public function testAllUnitsAndCodesGroundingInAiAssistant(): void {
         require_once dirname(__DIR__) . '/api_ai_chat.php';
 
-        // 1. Uji query kode risiko spesifik (A.14, L.1, M.1, I.3, G.1)
-        $resA14 = getKnowledgeBaseFallback('A.14');
-        $this->assertStringContainsString('Identitas Risiko & Konteks Organisasi', $resA14);
-        $this->assertStringContainsString('5 Rencana Aksi Mitigasi Terdaftar', $resA14);
-        $this->assertStringContainsString('5 Rekomendasi Saran Mitigasi', $resA14);
-        $this->assertStringContainsString('Auto-Reminder', $resA14);
+        // 1. Uji query kode risiko spesifik (A.16, L.1, M.1, I.3, G.1)
+        $resA16 = getKnowledgeBaseFallback('A.16');
+        $this->assertStringContainsString('Identitas Risiko & Konteks Organisasi', $resA16);
+        $this->assertStringContainsString('5 Rencana Aksi Mitigasi Terdaftar', $resA16);
+        $this->assertStringContainsString('5 Rekomendasi Saran Mitigasi', $resA16);
+        $this->assertStringContainsString('Auto-Reminder', $resA16);
 
         $resL1 = getKnowledgeBaseFallback('saran mitigasi L.1');
         $this->assertStringContainsString('L.1', $resL1);

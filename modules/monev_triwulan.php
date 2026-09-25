@@ -96,7 +96,7 @@ if ($activeId > 0) {
 
     if ($kkprRow) {
         // Get all risks for this KKPR
-        $s2 = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY no_urut, id");
+        $s2 = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
         $s2->bind_param('i', $activeId); $s2->execute();
         $baseRisks = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 

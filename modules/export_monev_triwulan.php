@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
 
@@ -14,7 +14,7 @@ $s->bind_param('i', $activeId); $s->execute();
 $kkpr = $s->get_result()->fetch_assoc(); $s->close();
 if (!$kkpr) die('Data KKPR tidak ditemukan.');
 
-$s2 = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY no_urut, id");
+$s2 = $db->prepare("SELECT * FROM kkpr_risiko WHERE id_kkpr=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
 $s2->bind_param('i', $activeId); $s2->execute();
 $baseRisks = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 

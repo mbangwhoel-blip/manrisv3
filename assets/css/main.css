@@ -1003,20 +1003,58 @@ textarea.form-control{resize:vertical;min-height:90px}
 .act-btn-sign{background:transparent;color:var(--accent);border-color:var(--border);}
 .act-btn-sign:hover{background:var(--surface2);}
 .act-btn:disabled{opacity:.5;cursor:not-allowed;}
-.act-btn-group{display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;}
-.ikk-data-table{table-layout:auto;width:max-content;min-width:1250px;font-size:.78rem;}
-.ikk-data-table .col-no{width:48px}.ikk-data-table .col-wide{width:220px}.ikk-data-table .col-indicator{width:260px}.ikk-data-table .col-target{width:190px}.ikk-data-table .col-person{width:170px}.ikk-data-table .col-note{width:190px}.ikk-data-table .col-action{width:100px}
-.ikk-data-table th,.ikk-data-table td{padding:10px 12px;line-height:1.4;overflow-wrap:anywhere;vertical-align:middle;}
-.ikk-data-table th{font-size:.72rem;white-space:normal;}
-.ikk-data-table tbody tr:nth-child(even),.mitigasi-data-table tbody tr:nth-child(even){background:rgba(248,250,252,.6);}
-.ikk-data-table tbody tr:hover,.mitigasi-data-table tbody tr:hover{background:rgba(219,234,254,.35);}
-.ikk-action-cell,.mitigasi-action-cell{white-space:nowrap!important;text-align:center!important;}
-.ikk-action-buttons,.mitigasi-action-buttons{display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;}
-.ikk-action-buttons .btn,.mitigasi-action-buttons .btn{width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;}
-.mitigasi-data-table{table-layout:auto;width:max-content;min-width:1250px;font-size:.78rem;}
-.mitigasi-data-table .col-no{width:48px}.mitigasi-data-table .col-risk{width:190px}.mitigasi-data-table .col-action-text{width:260px}.mitigasi-data-table .col-person{width:150px}.mitigasi-data-table .col-date{width:125px}.mitigasi-data-table .col-status{width:135px}.mitigasi-data-table .col-cost{width:120px}.mitigasi-data-table .col-small{width:80px}.mitigasi-data-table .col-action{width:100px}
-.mitigasi-data-table th,.mitigasi-data-table td{padding:10px 12px;line-height:1.4;overflow-wrap:anywhere;vertical-align:middle;}
-.mitigasi-data-table th{font-size:.72rem;white-space:normal;}
+/* ── IKK Data Table: Seragam & Ringkas ── */
+.ikk-data-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 980px;
+  font-size: .74rem;
+}
+.ikk-data-table .col-no { width: 36px; }
+.ikk-data-table .col-wide { min-width: 150px; }
+.ikk-data-table .col-indicator { min-width: 190px; }
+.ikk-data-table .col-target { width: 120px; }
+.ikk-data-table .col-person { width: 150px; }
+.ikk-data-table .col-note { min-width: 130px; }
+.ikk-data-table .col-action { width: 75px; }
+
+.ikk-data-table th, .mitigasi-data-table th, .monev-data-table th {
+  padding: 8px 6px;
+  font-size: .70rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  vertical-align: middle;
+}
+.ikk-data-table td, .mitigasi-data-table td, .monev-data-table td {
+  padding: 8px 6px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.ikk-data-table tbody tr:nth-child(even), .mitigasi-data-table tbody tr:nth-child(even), .monev-data-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, .6);
+}
+.ikk-data-table tbody tr:hover, .mitigasi-data-table tbody tr:hover, .monev-data-table tbody tr:hover {
+  background: rgba(219, 234, 254, .35);
+}
+.ikk-action-cell, .mitigasi-action-cell { white-space: nowrap !important; text-align: center !important; }
+.ikk-action-buttons, .mitigasi-action-buttons { display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; }
+.ikk-action-buttons .btn, .mitigasi-action-buttons .btn { width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; }
+
+/* ── Mitigasi Data Table: Seragam & Terstruktur ── */
+.mitigasi-data-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 980px;
+  font-size: .74rem;
+}
+
+/* ── Monev Data Table: Seragam & Terstruktur ── */
+.monev-data-table {
+  table-layout: auto;
+  font-size: .74rem;
+}
 .data-table th.sticky-col, .data-table td.sticky-col {
   position: sticky; left: 0; background: var(--surface); z-index: 2;
   box-shadow: 2px 0 5px rgba(0,0,0,0.05);
@@ -1369,22 +1407,161 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
 
 .kkpr-risiko-hero .risiko-hero-actions{flex:0 0 auto;justify-content:flex-end;flex-wrap:wrap;gap:8px;}
 
-.profil-detail-table{table-layout:auto;width:max-content;min-width:2050px;font-size:.75rem;}
-.profil-detail-table .col-no{width:48px}.profil-detail-table .col-unit{width:155px}.profil-detail-table .col-risk{width:210px}.profil-detail-table .col-code{width:95px}
-.profil-detail-table .col-score{width:66px}.profil-detail-table .col-weight{width:78px}.profil-detail-table .col-level{width:125px}.profil-detail-table .col-priority{width:105px}
-.profil-detail-table .col-control{width:230px}.profil-detail-table .col-schedule{width:140px}.profil-detail-table .col-person{width:155px}.profil-detail-table .col-action{width:100px}
-.profil-detail-table th{padding:9px 8px;font-size:.68rem;line-height:1.25;white-space:normal;vertical-align:middle;}
-.profil-detail-table td{padding:9px 8px;line-height:1.35;overflow-wrap:anywhere;vertical-align:middle;}
-.profil-detail-table th:nth-child(5),.profil-detail-table td:nth-child(5),.profil-detail-table th:nth-child(6),.profil-detail-table td:nth-child(6),.profil-detail-table th:nth-child(7),.profil-detail-table td:nth-child(7),.profil-detail-table th:nth-child(8),.profil-detail-table td:nth-child(8),.profil-detail-table th:nth-child(9),.profil-detail-table td:nth-child(9),.profil-detail-table th:nth-child(14),.profil-detail-table td:nth-child(14),.profil-detail-table th:nth-child(15),.profil-detail-table td:nth-child(15),.profil-detail-table th:nth-child(16),.profil-detail-table td:nth-child(16),.profil-detail-table th:nth-child(17),.profil-detail-table td:nth-child(17),.profil-detail-table th:nth-child(18),.profil-detail-table td:nth-child(18){text-align:center;}
-.profil-detail-table tbody tr:nth-child(even){background:rgba(248,250,252,.6);}
-.profil-detail-table tbody tr:hover{background:rgba(219,234,254,.35);}
-.kkpr-data-table{min-width:2350px;}
-.kkpr-data-table .col-no{width:48px}.kkpr-data-table .col-code{width:95px}.kkpr-data-table .col-risk{width:210px}
-.kkpr-data-table .col-text{width:170px}.kkpr-data-table .col-source{width:120px}.kkpr-data-table .col-small{width:72px}
-.kkpr-data-table .col-control{width:230px}.kkpr-data-table .col-score{width:66px}.kkpr-data-table .col-weight{width:78px}.kkpr-data-table .col-level{width:125px}.kkpr-data-table .col-priority{width:105px}
-.kkpr-data-table .col-choice{width:160px}.kkpr-data-table .col-schedule{width:140px}.kkpr-data-table .col-action{width:100px}
-.kkpr-data-table th,.kkpr-data-table td{white-space:normal;}
-.kkpr-data-table th:nth-child(1),.kkpr-data-table td:nth-child(1),.kkpr-data-table th:nth-child(5),.kkpr-data-table td:nth-child(5),.kkpr-data-table th:nth-child(6),.kkpr-data-table td:nth-child(6),.kkpr-data-table th:nth-child(9),.kkpr-data-table td:nth-child(9),.kkpr-data-table th:nth-child(10),.kkpr-data-table td:nth-child(10),.kkpr-data-table th:nth-child(11),.kkpr-data-table td:nth-child(11),.kkpr-data-table th:nth-child(12),.kkpr-data-table td:nth-child(12),.kkpr-data-table th:nth-child(13),.kkpr-data-table td:nth-child(13),.kkpr-data-table th:nth-child(14),.kkpr-data-table td:nth-child(14),.kkpr-data-table th:nth-child(15),.kkpr-data-table td:nth-child(15),.kkpr-data-table th:nth-child(16),.kkpr-data-table td:nth-child(16),.kkpr-data-table th:nth-child(21),.kkpr-data-table td:nth-child(21),.kkpr-data-table th:nth-child(22),.kkpr-data-table td:nth-child(22),.kkpr-data-table th:nth-child(23),.kkpr-data-table td:nth-child(23),.kkpr-data-table th:nth-child(24),.kkpr-data-table td:nth-child(24),.kkpr-data-table th:nth-child(25),.kkpr-data-table td:nth-child(25){text-align:center;}
+/* ── Detail Profil Risiko: Tampilan Ringkas & Bebas Scroll Jauh ── */
+.profil-detail-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 1080px;
+  font-size: .74rem;
+}
+.profil-detail-table .col-no { width: 36px; }
+.profil-detail-table .col-code { width: 68px; }
+.profil-detail-table .col-risk { min-width: 220px; }
+.profil-detail-table .col-score { width: 34px; }
+.profil-detail-table .col-val { width: 56px; }
+.profil-detail-table .col-level { width: 92px; }
+.profil-detail-table .col-priority { width: 44px; }
+.profil-detail-table .col-control { min-width: 180px; }
+.profil-detail-table .col-pic-jadwal { width: 145px; }
+.profil-detail-table .col-action { width: 68px; }
+
+.profil-detail-table th {
+  padding: 8px 6px;
+  font-size: .70rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  vertical-align: middle;
+}
+.profil-detail-table td {
+  padding: 8px 6px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.profil-detail-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, .6);
+}
+.profil-detail-table tbody tr:hover {
+  background: rgba(219, 234, 254, .35);
+}
+.badge-kode-risiko {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--accent, #2563eb);
+  background: rgba(37, 99, 235, .08);
+  border: 1px solid rgba(37, 99, 235, .22);
+  border-radius: 4px;
+}
+
+/* ── KKPR Data Table: Ringkas & Terstruktur ── */
+.kkpr-data-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 1450px;
+  font-size: .73rem;
+}
+.kkpr-data-table .col-no { width: 34px; }
+.kkpr-data-table .col-code { width: 65px; }
+.kkpr-data-table .col-risk { min-width: 140px; }
+.kkpr-data-table .col-text { min-width: 120px; }
+.kkpr-data-table .col-source { width: 75px; }
+.kkpr-data-table .col-small { width: 48px; }
+.kkpr-data-table .col-control { min-width: 120px; }
+.kkpr-data-table .col-score { width: 32px; }
+.kkpr-data-table .col-val { width: 52px; }
+.kkpr-data-table .col-level { width: 82px; }
+.kkpr-data-table .col-choice { width: 90px; }
+.kkpr-data-table .col-schedule { width: 110px; }
+.kkpr-data-table .col-action { width: 68px; }
+
+.kkpr-data-table th {
+  padding: 8px 6px;
+  font-size: .69rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  vertical-align: middle;
+}
+.kkpr-data-table td {
+  padding: 8px 6px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.kkpr-data-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, .6);
+}
+.kkpr-data-table tbody tr:hover {
+  background: rgba(219, 234, 254, .35);
+}
+
+/* ── KKPMR Data Table: Ringkas & Terstruktur ── */
+.kkpmr-data-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 1180px;
+  font-size: .74rem;
+}
+.kkpmr-data-table th {
+  padding: 8px 6px;
+  font-size: .70rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  vertical-align: middle;
+}
+.kkpmr-data-table td {
+  padding: 8px 6px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.kkpmr-data-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, .6);
+}
+.kkpmr-data-table tbody tr:hover {
+  background: rgba(219, 234, 254, .35);
+}
+
+/* ── Risiko Master Data Table: Seragam & Terstruktur ── */
+.risiko-master-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 0;
+  font-size: .74rem;
+}
+.risiko-master-table .col-no { width: 38px; }
+.risiko-master-table .col-code { width: 68px; }
+.risiko-master-table .col-risk { min-width: 200px; }
+.risiko-master-table .col-owner { width: 18%; min-width: 130px; }
+.risiko-master-table .col-dept { width: 18%; min-width: 130px; }
+.risiko-master-table .col-status { width: 90px; }
+.risiko-master-table .col-action { width: 85px; }
+
+.risiko-master-table th {
+  padding: 8px 6px;
+  font-size: .70rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  vertical-align: middle;
+}
+.risiko-master-table td {
+  padding: 8px 6px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  vertical-align: middle;
+}
+.risiko-master-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, .6);
+}
+.risiko-master-table tbody tr:hover {
+  background: rgba(219, 234, 254, .35);
+}
 .kkpr-action-cell, .kkpmr-action-cell {white-space:nowrap!important;text-align:center!important;}
 .kkpr-action-buttons, .kkpmr-action-buttons {display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;}
 .kkpr-action-buttons form, .ikk-action-buttons form, .mitigasi-action-buttons form, .risiko-action-buttons form, .kkpmr-action-buttons form {display:contents;}
