@@ -120,7 +120,8 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
       </div>
     </div>
     
-    <?php $isLaporanGroupActive = in_array($currentPage, ['laporan', 'laporan_konsolidasi', 'laporan_monev']); ?>
+    <?php if (hasRole('Admin','Risk Manager','Pimpinan','Koordinator')): ?>
+    <?php $isLaporanGroupActive = in_array($currentPage, ['laporan_konsolidasi', 'laporan_monev']); ?>
     <div class="nav-group <?= $isLaporanGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isLaporanGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isLaporanGroupActive ? 'true' : 'false' ?>">
         <span class="nav-group-label">
@@ -129,19 +130,15 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
         <i class="fas fa-chevron-down chevron"></i>
       </button>
       <div class="nav-group-items <?= $isLaporanGroupActive ? 'show' : '' ?>">
-        <a href="<?= APP_URL ?>/?page=laporan" class="nav-item <?= $currentPage==='laporan'?'active':'' ?>">
-          <i class="fas fa-file-alt"></i><span>Laporan Identifikasi Risiko</span>
+        <a href="<?= APP_URL ?>/?page=laporan_konsolidasi" class="nav-item <?= $currentPage==='laporan_konsolidasi'?'active':'' ?>">
+          <i class="fas fa-layer-group"></i><span>Laporan Konsolidasi</span>
         </a>
-         <?php if (hasRole('Admin','Risk Manager','Pimpinan','Koordinator')): ?>
-          <a href="<?= APP_URL ?>/?page=laporan_konsolidasi" class="nav-item <?= $currentPage==='laporan_konsolidasi'?'active':'' ?>">
-            <i class="fas fa-layer-group"></i><span>Laporan Konsolidasi</span>
-          </a>
-          <a href="<?= APP_URL ?>/?page=laporan_monev" class="nav-item <?= $currentPage==='laporan_monev'?'active':'' ?>">
-            <i class="fas fa-file-medical-alt"></i><span>Laporan Monev Manajemen Risiko</span>
-          </a>
-         <?php endif; ?>
+        <a href="<?= APP_URL ?>/?page=laporan_monev" class="nav-item <?= $currentPage==='laporan_monev'?'active':'' ?>">
+          <i class="fas fa-file-medical-alt"></i><span>Laporan Monev Manajemen Risiko</span>
+        </a>
       </div>
     </div>
+    <?php endif; ?>
     
     <?php if (hasRole('Admin')): ?>
     <?php $isMasterGroupActive = in_array($currentPage, ['master_indikator', 'kategori', 'saran_mitigasi']); ?>
