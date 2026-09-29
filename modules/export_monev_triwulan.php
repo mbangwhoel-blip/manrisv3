@@ -63,14 +63,18 @@ if ($type === 'excel') {
     echo "\xEF\xBB\xBF"; // UTF-8 BOM
 }
 
-function tBg($t){
-    if($t=='Sangat Tinggi') return '#dc2626'; if($t=='Tinggi') return '#f97316';
-    if($t=='Sedang') return '#FFFF00'; if($t=='Rendah') return '#22c55e';
-    if($t=='Sangat Rendah') return '#3b82f6'; return '';
+if (!function_exists('tBg')) {
+    function tBg($t){
+        if($t=='Sangat Tinggi') return '#dc2626'; if($t=='Tinggi') return '#f97316';
+        if($t=='Sedang') return '#FFFF00'; if($t=='Rendah') return '#22c55e';
+        if($t=='Sangat Rendah') return '#3b82f6'; return '';
+    }
 }
-function tCl($t){
-    if($t=='Sedang') return '#000';
-    return '#fff';
+if (!function_exists('tCl')) {
+    function tCl($t){
+        if($t=='Sedang') return '#000';
+        return '#fff';
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -112,9 +116,8 @@ function tCl($t){
                 <th rowspan="2">NO</th>
                 <th rowspan="2">RISIKO</th>
                 <th rowspan="2">KODE RISIKO</th>
-                <th colspan="6">KONDISI <?= $activeTw == 1 ? 'AWAL' : 'AKHIR TRIWULAN '.($activeTw-1) ?></th>
+                <th colspan="6">KONDISI <?= $activeTw == 1 ? 'AWAL' : 'AWAL TRIWULAN '.($activeTw-1) ?></th>
                 <th rowspan="2">UPAYA PENGENDALIAN</th>
-                <th rowspan="2">LINK DATA DUKUNG <?= $activeTw == 1 ? '' : 'TRIWULAN '.($activeTw-1) ?></th>
                 <th colspan="5">KONDISI AKHIR TRIWULAN <?= $activeTw ?></th>
                 <th colspan="2">SIMPULAN</th>
                 <th rowspan="2">KENDALA / MASALAH</th>
@@ -140,7 +143,6 @@ function tCl($t){
                 <td class="text-center" style="background:<?=tBg($r['prev_tingkat'])?>;color:<?=tCl($r['prev_tingkat'])?>"><?= $r['prev_tingkat'] ?></td>
                 <td class="text-center"><?= $r['prev_prio'] ?></td>
                 <td><?= $c ? nl2br(htmlspecialchars($c['upaya_pengendalian'])) : '-' ?></td>
-                <td><?= $r['prev_link'] === '-' ? '-' : htmlspecialchars($r['prev_link']) ?></td>
                 <td class="text-center"><?= $c ? $c['pantau_p'] : '-' ?></td>
                 <td class="text-center"><?= $c ? $c['pantau_d'] : '-' ?></td>
                 <td class="text-center"><?= $c ? $c['pantau_bobot'] : '-' ?></td>

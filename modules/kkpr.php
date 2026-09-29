@@ -752,30 +752,35 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
 <div id="kkprTabD" class="tab-content <?= $activeTab==='detail'?'active':'' ?>">
 
   <!-- Compact Context Bar -->
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow-sm)">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="background:var(--primary-glow);color:var(--primary);font-weight:800;padding:4px 10px;border-radius:8px;font-size:.85rem">
-        <i class="fas fa-file-invoice"></i> KKPR Tahun <?= xss($kkprRow['tahun']) ?>
-      </span>
-      <span style="font-weight:700;color:var(--text);font-size:.92rem">
-        <?= xss($kkprRow['unit_pemilik_risiko'] ?? 'Unit Belum Ditentukan') ?>
-      </span>
-      <?php if(!empty($kkprRow['status_kkpr'])): ?>
-      <span class="badge badge-<?= $kkprRow['status_kkpr']==='Disetujui'?'success':($kkprRow['status_kkpr']==='Revisi'?'danger':'warning') ?>" style="font-size:.75rem">
-        Status: <?= xss($kkprRow['status_kkpr']) ?>
-      </span>
-      <?php endif; ?>
-      <?php if(!empty($kkprRow['sasaran'])): ?>
-      <span style="color:var(--text-muted);font-size:.82rem;border-left:1px solid var(--border);padding-left:12px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= xss($kkprRow['sasaran']) ?>">
-        <i class="fas fa-bullseye" style="color:var(--primary);margin-right:4px"></i> Sasaran: <?= xss($kkprRow['sasaran']) ?>
-      </span>
-      <?php endif; ?>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="background:var(--primary-glow);color:var(--primary);font-weight:800;padding:4px 10px;border-radius:8px;font-size:.85rem;display:inline-flex;align-items:center;gap:6px">
+          <i class="fas fa-file-invoice"></i> KKPR Tahun <?= xss($kkprRow['tahun']) ?>
+        </span>
+        <span style="font-weight:700;color:var(--text);font-size:.95rem">
+          <?= xss($kkprRow['unit_pemilik_risiko'] ?? 'Unit Belum Ditentukan') ?>
+        </span>
+        <?php if(!empty($kkprRow['status_kkpr'])): ?>
+        <span class="badge badge-<?= $kkprRow['status_kkpr']==='Disetujui'?'success':($kkprRow['status_kkpr']==='Revisi'?'danger':'warning') ?>" style="font-size:.75rem">
+          Status: <?= xss($kkprRow['status_kkpr']) ?>
+        </span>
+        <?php endif; ?>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" class="btn btn-sm btn-outline" onclick="bukaTabHeaderKkpr()" title="Lihat dan edit sasaran, program, dan TTD dokumen KKPR">
+          <i class="fas fa-info-circle"></i> Info Sasaran &amp; Dokumen <i class="fas fa-chevron-right" style="font-size:.7rem;margin-left:2px"></i>
+        </button>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button type="button" class="btn btn-sm btn-outline" onclick="bukaTabHeaderKkpr()" title="Lihat dan edit sasaran, program, dan TTD dokumen KKPR">
-        <i class="fas fa-info-circle"></i> Info Sasaran &amp; Dokumen <i class="fas fa-chevron-right" style="font-size:.7rem;margin-left:2px"></i>
-      </button>
+    <?php if(!empty($kkprRow['sasaran'])): ?>
+    <div style="padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:flex-start;gap:8px;font-size:.84rem;color:var(--text-muted);line-height:1.5">
+      <i class="fas fa-bullseye" style="color:var(--primary);margin-top:3px;flex-shrink:0"></i>
+      <div>
+        <strong style="color:var(--text);font-weight:700">Sasaran:</strong> <?= xss($kkprRow['sasaran']) ?>
+      </div>
     </div>
+    <?php endif; ?>
   </div>
 
 <!-- Tabel -->

@@ -201,9 +201,8 @@ if ($activeId > 0) {
                 <th rowspan="2">NO</th>
                 <th rowspan="2">RISIKO</th>
                 <th rowspan="2">KODE<br>RISIKO</th>
-                <th colspan="5">KONDISI <?= $activeTw == 1 ? 'AWAL' : 'AKHIR TRIWULAN '.($activeTw-1) ?></th>
+                <th colspan="5">KONDISI <?= $activeTw == 1 ? 'AWAL' : 'AWAL TRIWULAN '.($activeTw-1) ?></th>
                 <th rowspan="2">UPAYA PENGENDALIAN</th>
-                <th rowspan="2">LINK DATA DUKUNG<br><?= $activeTw == 1 ? '' : 'TW '.($activeTw-1) ?></th>
                 <th colspan="5">KONDISI AKHIR TRIWULAN <?= $activeTw ?></th>
                 <th colspan="2">SIMPULAN</th>
                 <th rowspan="2">KENDALA / MASALAH</th>
@@ -218,7 +217,7 @@ if ($activeId > 0) {
               </tr>
             </thead>
             <tbody>
-              <?php if(empty($rows)): ?><tr><td colspan="19" class="text-center">Belum ada risiko</td></tr><?php endif; ?>
+              <?php if(empty($rows)): ?><tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 19 : 18 ?>" class="text-center">Belum ada risiko</td></tr><?php endif; ?>
               <?php foreach($rows as $i => $r): 
                 $c = $r['curr'];
                 function bC($t){
@@ -240,7 +239,6 @@ if ($activeId > 0) {
                 
                 <!-- Upaya -->
                 <td><?= $c ? nl2br(htmlspecialchars($c['upaya_pengendalian'])) : '-' ?></td>
-                <td><?= $r['prev_link'] === '-' ? '-' : '<a href="'.htmlspecialchars($r['prev_link']).'" target="_blank">Link</a>' ?></td>
                 
                 <!-- Current -->
                 <td class="text-center"><?= $c ? $c['pantau_p'] : '-' ?></td>

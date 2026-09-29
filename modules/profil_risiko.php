@@ -1176,28 +1176,33 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
 <div id="tabDetail" class="tab-content <?= $activeTab==='detail'?'active':'' ?>">
 
   <!-- Compact Context Bar -->
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow-sm)">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="background:var(--primary-glow);color:var(--primary);font-weight:800;padding:4px 10px;border-radius:8px;font-size:.85rem">
-        <i class="fas fa-shield-alt"></i> Tahun <?= xss($profilRow['tahun']) ?>
-      </span>
-      <span style="font-weight:700;color:var(--text);font-size:.92rem">
-        <?= xss($profilRow['unit_pemilik_risiko'] ?? 'Unit Belum Ditentukan') ?>
-      </span>
-      <?php if(!empty($profilRow['sasaran'])): ?>
-      <span style="color:var(--text-muted);font-size:.82rem;border-left:1px solid var(--border);padding-left:12px;max-width:400px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= xss($profilRow['sasaran']) ?>">
-        <i class="fas fa-bullseye" style="color:var(--primary);margin-right:4px"></i> Sasaran: <?= xss($profilRow['sasaran']) ?>
-      </span>
-      <?php endif; ?>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="background:var(--primary-glow);color:var(--primary);font-weight:800;padding:4px 10px;border-radius:8px;font-size:.85rem;display:inline-flex;align-items:center;gap:6px">
+          <i class="fas fa-shield-alt"></i> Tahun <?= xss($profilRow['tahun']) ?>
+        </span>
+        <span style="font-weight:700;color:var(--text);font-size:.95rem">
+          <?= xss($profilRow['unit_pemilik_risiko'] ?? 'Unit Belum Ditentukan') ?>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">
+          Kelengkapan: <strong style="color:<?= $profilCompleteness === 100 ? 'var(--success)' : 'var(--accent)' ?>"><?= $profilCompleteness ?>%</strong>
+        </span>
+        <button type="button" class="btn btn-sm btn-outline" onclick="bukaTabHeaderProfil()" title="Lihat dan edit sasaran, program, dan pejabat penandatangan">
+          <i class="fas fa-info-circle"></i> Info Sasaran &amp; TTD <i class="fas fa-chevron-right" style="font-size:.7rem;margin-left:2px"></i>
+        </button>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <span style="font-size:.8rem;color:var(--text-muted)">
-        Kelengkapan: <strong style="color:<?= $profilCompleteness === 100 ? 'var(--success)' : 'var(--accent)' ?>"><?= $profilCompleteness ?>%</strong>
-      </span>
-      <button type="button" class="btn btn-sm btn-outline" onclick="bukaTabHeaderProfil()" title="Lihat dan edit sasaran, program, dan pejabat penandatangan">
-        <i class="fas fa-info-circle"></i> Info Sasaran &amp; TTD <i class="fas fa-chevron-right" style="font-size:.7rem;margin-left:2px"></i>
-      </button>
+    <?php if(!empty($profilRow['sasaran'])): ?>
+    <div style="padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:flex-start;gap:8px;font-size:.84rem;color:var(--text-muted);line-height:1.5">
+      <i class="fas fa-bullseye" style="color:var(--primary);margin-top:3px;flex-shrink:0"></i>
+      <div>
+        <strong style="color:var(--text);font-weight:700">Sasaran:</strong> <?= xss($profilRow['sasaran']) ?>
+      </div>
     </div>
+    <?php endif; ?>
   </div>
 
   <?php if(empty($detailRows)): ?>

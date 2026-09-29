@@ -7,7 +7,7 @@
  */
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
-requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
+requireRole('Admin', 'Kepala', 'Pimpinan', 'Koordinator');
 $db = getDB();
 
 $tahun = trim((string)($_GET['tahun'] ?? date('Y')));

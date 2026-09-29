@@ -1,17 +1,17 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
-// Konsolidasi bisa diakses Koordinator; monev tahunan bisa diakses Staff
-if (($_GET['konsolidasi'] ?? '') === '1') {
-    requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
+$isConsolidated = (($_GET['konsolidasi'] ?? '') === '1') || (($_GET['page'] ?? '') === 'monev_konsolidasi');
+// Konsolidasi hanya bisa diakses Admin, Kepala/Pimpinan, Koordinator; monev tahunan bisa diakses Risk Manager & Staff
+if ($isConsolidated) {
+    requireRole('Admin', 'Kepala', 'Pimpinan', 'Koordinator');
 } else {
-    requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Staff');
+    requireRole('Admin', 'Risk Manager', 'Kepala', 'Pimpinan', 'Koordinator', 'Staff');
 }
 
 $activeTahun = $_GET['tahun'] ?? date('Y');
 $jenisLaporan = $_GET['jenis'] ?? 'tw1';
 $type = $_GET['type'] ?? 'excel';
-$isConsolidated = ($_GET['konsolidasi'] ?? '') === '1';
 
 $db = getDB();
 $reportUser = strtolower(trim((string)($_SESSION['user_username'] ?? '')));
@@ -39,16 +39,68 @@ $m_s->bind_param('is', $twTarget, $activeTahun); $m_s->execute();
 $monevCurrRaw = $m_s->get_result()->fetch_all(MYSQLI_ASSOC); $m_s->close();
 $monevCurr = []; foreach ($monevCurrRaw as $m) $monevCurr[$m['id_risiko']] = $m;
 
+// Ambil data triwulan sebelumnya untuk perbandingan tiap triwulan (TW2 vs TW1, TW3 vs TW2, TW4 vs TW3)
+$monevPrev = [];
+if ($twTarget > 1 && $jenisLaporan !== 'tahunan') {
+    $twPrev = $twTarget - 1;
+    $m_p = $db->prepare("SELECT m.* FROM monev_triwulan m JOIN kkpr_risiko r ON r.id = m.id_risiko JOIN kkpr_header h ON h.id = r.id_kkpr WHERE m.triwulan=? AND h.tahun=?");
+    $m_p->bind_param('is', $twPrev, $activeTahun); $m_p->execute();
+    $monevPrevRaw = $m_p->get_result()->fetch_all(MYSQLI_ASSOC); $m_p->close();
+    foreach ($monevPrevRaw as $m) $monevPrev[$m['id_risiko']] = $m;
+}
+
 $rows = [];
 foreach ($baseRisks as $r) {
-    $idr = $r['id']; $curr = $monevCurr[$idr] ?? null;
+    $idr = $r['id'];
+    $curr = $monevCurr[$idr] ?? null;
+    $prev = $monevPrev[$idr] ?? null;
 
-    // Baseline pembanding = PENILAIAN AWAL untuk semua periode (tw1-tw4 & tahunan),
-    // konsisten dengan halaman monev dan laporan_monev.
-    $pA = $r['probabilitas']; $dA = $r['dampak_level']; $bA = $r['bobot']; $nA = $r['nilai_risiko']; $tA = $r['tingkat_risiko']; $prioA = $r['prioritas_risiko'] ?? '-';
-    $linkPrev = '-';
-    $r['prev_p'] = $pA; $r['prev_d'] = $dA; $r['prev_bobot'] = $bA; $r['prev_nilai'] = $nA; $r['prev_tingkat'] = $tA; $r['prev_prio'] = $prioA; $r['prev_link'] = $linkPrev;
+    if ($twTarget > 1 && $jenisLaporan !== 'tahunan') {
+        // Kondisi awal mengambil hasil triwulan sebelumnya (misal TW1 untuk TW2)
+        // Fallback ke baseline awal KKPR bila triwulan sebelumnya belum ada data
+        $pA = ($prev && $prev['pantau_p'] !== null) ? $prev['pantau_p'] : $r['probabilitas'];
+        $dA = ($prev && $prev['pantau_d'] !== null) ? $prev['pantau_d'] : $r['dampak_level'];
+        $bA = ($prev && $prev['pantau_bobot'] !== null) ? $prev['pantau_bobot'] : $r['bobot'];
+        $nA = ($prev && $prev['pantau_nilai'] !== null) ? $prev['pantau_nilai'] : $r['nilai_risiko'];
+        $tA = ($prev && !empty($prev['pantau_tingkat'])) ? $prev['pantau_tingkat'] : $r['tingkat_risiko'];
+        $prioA = $r['prioritas_risiko'] ?? '-';
+    } else {
+        // Untuk Triwulan 1 dan Tahunan: Kondisi awal adalah Penilaian Awal (Baseline KKPR)
+        $pA = $r['probabilitas'];
+        $dA = $r['dampak_level'];
+        $bA = $r['bobot'];
+        $nA = $r['nilai_risiko'];
+        $tA = $r['tingkat_risiko'];
+        $prioA = $r['prioritas_risiko'] ?? '-';
+    }
+
+    $r['prev_p'] = $pA;
+    $r['prev_d'] = $dA;
+    $r['prev_bobot'] = $bA;
+    $r['prev_nilai'] = $nA;
+    $r['prev_tingkat'] = $tA;
+    $r['prev_prio'] = $prioA;
     $r['curr'] = $curr;
+
+    // Evaluasi simpulan & efektivitas perbandingan triwulan aktif vs kondisi awal yang ditampilkan
+    if ($curr && $curr['pantau_nilai'] !== null) {
+        $skorAkhir = (float)$curr['pantau_nilai'];
+        $skorAwal = (float)$nA;
+        if ($skorAkhir < $skorAwal) {
+            $r['eval_simpulan'] = 'Tingkat risiko mengalami penurunan';
+            $r['eval_efektifitas'] = 'Efektif';
+        } elseif ($skorAkhir > $skorAwal) {
+            $r['eval_simpulan'] = 'Tingkat risiko mengalami peningkatan';
+            $r['eval_efektifitas'] = 'Tidak Efektif';
+        } else {
+            $r['eval_simpulan'] = 'Tingkat risiko tetap';
+            $r['eval_efektifitas'] = 'Tidak Efektif';
+        }
+    } else {
+        $r['eval_simpulan'] = '-';
+        $r['eval_efektifitas'] = '-';
+    }
+
     $rows[] = $r;
 }
 
@@ -56,28 +108,45 @@ $judul = $jenisLaporan === 'tahunan'
     ? "Monev Manajemen Risiko 1 Tahun"
     : "Monev Manajemen Risiko Triwulan $twTarget";
 
+// Penyesuaian judul header kondisi awal & kondisi akhir sesuai triwulan yang dipilih
+if ($jenisLaporan === 'tahunan') {
+    $headerKondisiAwal = 'KONDISI AWAL';
+    $headerKondisiAkhir = 'KONDISI AKHIR TRIWULAN 4';
+} elseif ($twTarget == 1) {
+    $headerKondisiAwal = 'KONDISI AWAL';
+    $headerKondisiAkhir = 'KONDISI AKHIR TRIWULAN 1';
+} else {
+    $headerKondisiAwal = 'KONDISI AWAL TRIWULAN ' . ($twTarget - 1);
+    $headerKondisiAkhir = 'KONDISI AKHIR TRIWULAN ' . $twTarget;
+}
+
 if ($type === 'excel') {
     while (ob_get_level() > 0) ob_end_clean();
+    $excelFilename = ($isConsolidated ? "Konsolidasi_Monev_" : "Monev_") . $activeTahun . "_" . $jenisLaporan . ".xls";
     header("Content-type: application/vnd.ms-excel; charset=UTF-8");
-    header("Content-Disposition: attachment; filename=Konsolidasi_Monev_".$activeTahun.".xls");
+    header("Content-Disposition: attachment; filename=" . $excelFilename);
     header("Pragma: no-cache"); header("Expires: 0");
     echo "\xEF\xBB\xBF";
 }
 
-function tBg($t){ if($t=='Sangat Tinggi') return '#dc2626'; if($t=='Tinggi') return '#f97316'; if($t=='Sedang') return '#FFFF00'; if($t=='Rendah') return '#22c55e'; if($t=='Sangat Rendah') return '#3b82f6'; return ''; }
-function tCl($t){ if($t=='Sedang') return '#000'; return '#fff'; }
+if (!function_exists('tBg')) {
+    function tBg($t){ if($t=='Sangat Tinggi') return '#dc2626'; if($t=='Tinggi') return '#f97316'; if($t=='Sedang') return '#FFFF00'; if($t=='Rendah') return '#22c55e'; if($t=='Sangat Rendah') return '#3b82f6'; return ''; }
+}
+if (!function_exists('tCl')) {
+    function tCl($t){ if($t=='Sedang') return '#000'; return '#fff'; }
+}
 ?>
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title><?= $judul ?></title>
 <style>
     body { font-family: Arial, sans-serif; font-size: 9px; margin: 0; } table { width: 100%; min-width: 1100px; table-layout: fixed; border-collapse: collapse; } th, td { border: 1px solid #000; padding: 4px 5px; vertical-align: top; line-height: 1.25; overflow-wrap:anywhere; word-break:normal; } th { background-color: #e5e7eb; text-align: center; vertical-align: middle; font-weight: bold; line-height: 1.2; } .text-center { text-align: center; } .title { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 3px; } .subtitle { text-align: center; font-size: 11px; font-weight: normal; margin-bottom: 9px; } .column-number-row th { background:#d1d5db; font-size:8px; padding:2px; height:16px; }
-    .export-table td:nth-child(1),.export-table td:nth-child(4),.export-table td:nth-child(5),.export-table td:nth-child(6),.export-table td:nth-child(7),.export-table td:nth-child(8),.export-table td:nth-child(10),.export-table td:nth-child(13),.export-table td:nth-child(14),.export-table td:nth-child(15),.export-table td:nth-child(16) { white-space:nowrap; text-align:center; }
+    .export-table td:nth-child(1),.export-table td:nth-child(4),.export-table td:nth-child(5),.export-table td:nth-child(6),.export-table td:nth-child(7),.export-table td:nth-child(8),.export-table td:nth-child(10),.export-table td:nth-child(12),.export-table td:nth-child(13),.export-table td:nth-child(14),.export-table td:nth-child(15) { white-space:nowrap; text-align:center; }
     /* Kolom TINGKAT: bila tidak muat, teks turun ke baris berikutnya (tidak terpotong) */
-    .export-table td:nth-child(9),.export-table td:nth-child(17) { text-align:center; white-space:normal; word-break:normal; }
-    .export-table td:nth-child(18),.export-table td:nth-child(19) { white-space:normal; min-width:72px; }
+    .export-table td:nth-child(9),.export-table td:nth-child(16) { text-align:center; white-space:normal; word-break:normal; }
+    .export-table td:nth-child(17),.export-table td:nth-child(18) { white-space:normal; min-width:68px; }
     /* Header sub-kolom (P/D/BOBOT/NILAI/TINGKAT/PRIORITAS/EFEKTIFITAS) tidak boleh melipat */
     .export-table thead tr:nth-child(2) th { white-space: nowrap; font-size: 8px; }
-    /* Lebar kolom proporsional (total ~100%), PRIORITAS/EFEKTIFITAS lebar agar header tidak menyentuh garis */
-    .export-table col:nth-child(1){width:2.2%}.export-table col:nth-child(2){width:7%}.export-table col:nth-child(3){width:10%}.export-table col:nth-child(4){width:3.8%}.export-table col:nth-child(5),.export-table col:nth-child(6){width:2.2%}.export-table col:nth-child(7){width:3.8%}.export-table col:nth-child(8){width:3.2%}.export-table col:nth-child(9){width:5%}.export-table col:nth-child(10){width:6%}.export-table col:nth-child(11){width:6.4%}.export-table col:nth-child(12){width:4%}.export-table col:nth-child(13),.export-table col:nth-child(14){width:2.2%}.export-table col:nth-child(15){width:3.8%}.export-table col:nth-child(16){width:3.2%}.export-table col:nth-child(17){width:5%}.export-table col:nth-child(18){width:5.2%}.export-table col:nth-child(19){width:7%}.export-table col:nth-child(20),.export-table col:nth-child(21){width:5.4%}.export-table col:nth-child(22){width:4.6%}
+    /* Lebar kolom proporsional 21 kolom (total 100%) */
+    .export-table col:nth-child(1){width:2.2%}.export-table col:nth-child(2){width:7.5%}.export-table col:nth-child(3){width:11%}.export-table col:nth-child(4){width:3.8%}.export-table col:nth-child(5),.export-table col:nth-child(6){width:2.2%}.export-table col:nth-child(7){width:3.6%}.export-table col:nth-child(8){width:3.2%}.export-table col:nth-child(9){width:5%}.export-table col:nth-child(10){width:5.5%}.export-table col:nth-child(11){width:8%}.export-table col:nth-child(12),.export-table col:nth-child(13){width:2.2%}.export-table col:nth-child(14){width:3.6%}.export-table col:nth-child(15){width:3.2%}.export-table col:nth-child(16){width:5%}.export-table col:nth-child(17){width:6%}.export-table col:nth-child(18){width:6.6%}.export-table col:nth-child(19){width:6.8%}.export-table col:nth-child(20){width:6.8%}.export-table col:nth-child(21){width:5.6%}
     @media print { @page { size: A3 landscape; margin: 8mm; } body { margin: 0; font-size: 8px; } th, td { padding: 3px 4px; } .title { font-size: 12px; } .subtitle { font-size: 9px; margin-bottom: 6px; } .column-number-row th { font-size:7px; } }
     .print-bar{display:flex;gap:10px;align-items:center;padding:8px 14px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:6px;margin:6px;font-size:12px}
     .btn-print{padding:7px 16px;background:#1e3a5f;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700}
@@ -107,15 +176,14 @@ function tCl($t){ if($t=='Sedang') return '#000'; return '#fff'; }
     </div>
     <table class="export-table">
         <colgroup>
-            <?php foreach (range(1, 22) as $columnNo): ?><col><?php endforeach; ?>
+            <?php foreach (range(1, 21) as $columnNo): ?><col><?php endforeach; ?>
         </colgroup>
         <thead>
             <tr>
                 <th rowspan="2">NO</th><th rowspan="2">UNIT PEMILIK RISIKO</th><th rowspan="2">RISIKO</th><th rowspan="2">KODE RISIKO</th>
-                <th colspan="6">KONDISI AWAL</th>
+                <th colspan="6"><?= $headerKondisiAwal ?></th>
                 <th rowspan="2">UPAYA PENGENDALIAN</th>
-                <th rowspan="2">LINK DATA DUKUNG</th>
-                <th colspan="5">KONDISI AKHIR <?= $jenisLaporan == 'tahunan' ? 'TRIWULAN 4' : 'TRIWULAN ' . $twTarget ?></th>
+                <th colspan="5"><?= $headerKondisiAkhir ?></th>
                 <th colspan="2">SIMPULAN</th><th rowspan="2">KENDALA / MASALAH</th><th rowspan="2">RENCANA TINDAK LANJUT</th><th rowspan="2">LINK DATA DUKUNG TRIWULAN <?= $twTarget ?></th>
             </tr>
             <tr>
@@ -124,7 +192,7 @@ function tCl($t){ if($t=='Sedang') return '#000'; return '#fff'; }
                 <th>TINGKAT</th><th>EFEKTIFITAS</th>
             </tr>
             <tr class="column-number-row">
-                <?php foreach (range(1, 22) as $columnNo): ?><th><?= $columnNo ?></th><?php endforeach; ?>
+                <?php foreach (range(1, 21) as $columnNo): ?><th><?= $columnNo ?></th><?php endforeach; ?>
             </tr>
         </thead>
         <tbody>
@@ -134,10 +202,10 @@ function tCl($t){ if($t=='Sedang') return '#000'; return '#fff'; }
                 <td class="text-center"><?= $r['prev_p'] ?></td><td class="text-center"><?= $r['prev_d'] ?></td><td class="text-center"><?= $r['prev_bobot'] ?></td><td class="text-center"><?= round((float)$r['prev_nilai']) ?></td>
                 <td class="text-center" style="background:<?=tBg($r['prev_tingkat'])?>;color:<?=tCl($r['prev_tingkat'])?>"><?= $r['prev_tingkat'] ?></td><td class="text-center"><?= $r['prev_prio'] ?></td>
                 <td><?= $c ? nl2br(htmlspecialchars($c['upaya_pengendalian'])) : '-' ?></td>
-                <td><?= $r['prev_link'] === '-' ? '-' : htmlspecialchars($r['prev_link']) ?></td>
                 <td class="text-center"><?= $c ? $c['pantau_p'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_d'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_bobot'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_nilai'] : '-' ?></td>
                 <td class="text-center" style="<?= $c ? 'background:'.tBg($c['pantau_tingkat']).';color:'.tCl($c['pantau_tingkat']) : '' ?>"><?= $c ? $c['pantau_tingkat'] : '-' ?></td>
-                <td class="text-center"><?= $c ? htmlspecialchars($c['simpulan_tingkat']) : '-' ?></td><td class="text-center" style="<?= $c && $c['efektifitas']=='Efektif'?'background:#22c55e;color:#fff':'background:#dc2626;color:#fff' ?>"><?= $c ? htmlspecialchars($c['efektifitas']) : '-' ?></td>
+                <td class="text-center"><?= htmlspecialchars($r['eval_simpulan']) ?></td>
+                <td class="text-center" style="<?= $r['eval_efektifitas']=='Efektif'?'background:#22c55e;color:#fff':($r['eval_efektifitas']=='Tidak Efektif'?'background:#dc2626;color:#fff':'') ?>"><?= htmlspecialchars($r['eval_efektifitas']) ?></td>
                 <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td><td><?= $c ? nl2br(htmlspecialchars($c['rencana_tindak_lanjut'])) : '-' ?></td>
                 <td><?= $c && !empty($c['link_data_dukung']) ? htmlspecialchars($c['link_data_dukung']) : '-' ?></td>
             </tr>

@@ -68,8 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'saran_mitigasi' => 'modules/saran_mitigasi.php',
         'laporan_konsolidasi' => 'modules/laporan_konsolidasi.php',
         'master_indikator' => 'modules/master_indikator.php',
+        'monev'          => 'modules/monev_tahunan.php',
         'monev_triwulan' => 'modules/monev_tahunan.php',
-        'monev_tahunan' => 'modules/monev_tahunan.php',
+        'monev_tahunan'  => 'modules/monev_tahunan.php',
         'bot_settings'   => 'modules/bot_settings.php',
         'laporan_monev'  => 'modules/laporan_monev.php',
     ];
@@ -169,8 +170,8 @@ if ($page === 'ikk' && isset($_GET['export']) && in_array($_GET['export'], ['pdf
 }
 
 // ── Export Monev (Excel/PDF) — bypass layout ─────────────────
-if ($page === 'monev' && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
-    include __DIR__ . '/modules/monev.php';
+if (in_array($page, ['monev', 'monev_triwulan'], true) && isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'], true)) {
+    include __DIR__ . '/modules/export_monev_konsolidasi.php';
     exit;
 }
 
@@ -208,7 +209,7 @@ $modules = [
     'kkpr'           => 'modules/kkpr.php',
     'kkpmr'          => 'modules/kkpmr.php',
     'ikk'            => 'modules/ikk.php',
-    'monev'          => 'modules/monev.php',
+    'monev'          => 'modules/monev_tahunan.php',
     'monev_triwulan' => 'modules/monev_tahunan.php',
     'monev_tahunan'  => 'modules/monev_tahunan.php',
     'kategori'       => 'modules/kategori.php',
@@ -222,6 +223,32 @@ $modules = [
 ];
 
 $moduleFile = $modules[$page] ?? null;
+if (!$moduleFile) {
+    foreach ($modules as $k => $v) {
+        if (strcasecmp($k, $page) === 0) {
+            $moduleFile = $v;
+            break;
+        }
+    }
+}
+
+// Fallback pencarian case-insensitive untuk sistem operasi Linux hosting
+if ($moduleFile) {
+    $fullPath = __DIR__ . '/' . $moduleFile;
+    if (!file_exists($fullPath)) {
+        $dir = dirname($fullPath);
+        $baseName = basename($fullPath);
+        if (is_dir($dir)) {
+            $files = scandir($dir) ?: [];
+            foreach ($files as $f) {
+                if (strcasecmp($f, $baseName) === 0) {
+                    $moduleFile = dirname($moduleFile) . '/' . $f;
+                    break;
+                }
+            }
+        }
+    }
+}
 
 // ── Render layout — HANYA setelah semua redirect selesai ─────
 include __DIR__ . '/includes/header.php';
@@ -257,8 +284,14 @@ if ($moduleFile && file_exists(__DIR__ . '/' . $moduleFile)) {
 } else {
     echo '<div class="empty-state">
             <i class="fas fa-exclamation-circle"></i>
-            <h3>404 — Halaman Tidak Ditemukan</h3>
-          </div>';
+            <h3>404 — Halaman Tidak Ditemukan</h3>';
+    if (isLoggedIn() && hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator')) {
+        $reason = $moduleFile
+            ? 'File modul <code>' . htmlspecialchars($moduleFile) . '</code> tidak ditemukan di server.'
+            : 'Halaman/modul <code>' . htmlspecialchars($page) . '</code> belum terdaftar dalam sistem.';
+        echo '<p style="color:var(--text-muted);font-size:.85rem;margin-top:10px;">' . $reason . '<br>Pastikan file <code>' . htmlspecialchars($moduleFile ?: 'modules/' . $page . '.php') . '</code> dan <code>index.php</code> terbaru sudah di-upload ke server hosting.</p>';
+    }
+    echo '</div>';
 }
 
 include __DIR__ . '/includes/footer.php';

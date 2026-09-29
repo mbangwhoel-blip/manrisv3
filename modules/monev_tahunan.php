@@ -175,10 +175,10 @@ foreach ($allTwRows as $twItem) {
 
 $matrixData = [
     'awal' => ['label' => 'Kondisi Awal (Baseline KKPR)', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw1'  => ['label' => 'Triwulan I', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw2'  => ['label' => 'Triwulan II', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw3'  => ['label' => 'Triwulan III', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw4'  => ['label' => 'Triwulan IV', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw1'  => ['label' => 'Triwulan 1', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw2'  => ['label' => 'Triwulan 2', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw3'  => ['label' => 'Triwulan 3', 'counts' => [], 'items' => [], 'total' => 0],
+    'tw4'  => ['label' => 'Triwulan 4', 'counts' => [], 'items' => [], 'total' => 0],
 ];
 
 for ($p = 1; $p <= 5; $p++) {
@@ -423,10 +423,10 @@ $efektifBadge = function (?string $e): string {
     <div class="monev-matrix-tabs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <span style="font-size:.76rem;font-weight:700;color:var(--text-muted);margin-right:2px"><i class="fas fa-sliders"></i> Pantau Periode:</span>
       <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='awal'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="awal" onclick="switchMonevPeriod('awal')">Kondisi Awal</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw1'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw1" onclick="switchMonevPeriod('tw1')">Triwulan I</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw2'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw2" onclick="switchMonevPeriod('tw2')">Triwulan II</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw3'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw3" onclick="switchMonevPeriod('tw3')">Triwulan III</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw4'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw4" onclick="switchMonevPeriod('tw4')">Triwulan IV</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw1'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw1" onclick="switchMonevPeriod('tw1')">Triwulan 1</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw2'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw2" onclick="switchMonevPeriod('tw2')">Triwulan 2</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw3'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw3" onclick="switchMonevPeriod('tw3')">Triwulan 3</button>
+      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw4'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw4" onclick="switchMonevPeriod('tw4')">Triwulan 4</button>
     </div>
   </div>
 
@@ -490,8 +490,8 @@ $efektifBadge = function (?string $e): string {
 <div class="card" id="monev-table">
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
     <div>
-      <span class="card-title"><i class="fas fa-table"></i> <?= xss($jenisLabel) ?> — Tahun <?= xss($activeTahun) ?></span>
-      <span style="font-size:.72rem;color:var(--text-muted);display:block;margin-top:2px"><i class="fas fa-circle-info"></i> <?= count($rows) ?> risiko &bull; geser tabel ke kiri/kanan untuk melihat kolom yang tidak muat; gunakan kartu statistik di atas untuk memfilter</span>
+      <span class="card-title" id="monevTableTitle"><i class="fas fa-table"></i> <?= xss($jenisLabel) ?> — Tahun <?= xss($activeTahun) ?></span>
+      <span style="font-size:.72rem;color:var(--text-muted);display:block;margin-top:2px"><i class="fas fa-circle-info"></i> <?= count($rows) ?> risiko &bull; geser tabel ke kiri/kanan untuk melihat kolom yang tidak muat</span>
     </div>
     <div class="monev-toolbar">
       <span class="monev-chip" id="monevFilterChip" style="display:none" onclick="clearMonevFilter()" title="Klik untuk hapus filter"><i class="fas fa-filter"></i> <span id="monevFilterChipText"></span> <i class="fas fa-times-circle"></i></span>
@@ -618,7 +618,7 @@ $efektifBadge = function (?string $e): string {
   <div class="modal modal-lg" style="max-width:920px">
     <div class="modal-header">
       <div>
-        <h5 class="modal-title"><i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Isi Monev — <?= xss($jenisLabel) ?></h5>
+        <h5 class="modal-title" id="monevModalTitle"><i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Isi Monev — <?= xss($jenisLabel) ?></h5>
         <div class="monev-meta" id="monevModalMeta"></div>
       </div>
       <button type="button" class="btn-close" onclick="closeModal('modalMonev')" aria-label="Tutup"><i class="fas fa-times"></i></button>
@@ -628,7 +628,7 @@ $efektifBadge = function (?string $e): string {
       <input type="hidden" name="aksi" value="simpan_monev">
       <input type="hidden" name="id_risiko" id="monevRiskId">
       <input type="hidden" name="tahun" value="<?= xss($activeTahun) ?>">
-      <input type="hidden" name="jenis" value="<?= xss($jenisLaporan) ?>">
+      <input type="hidden" name="jenis" id="monevModalFormJenis" value="<?= xss($jenisLaporan) ?>">
       <div class="modal-body">
         <div class="monev-form-grid">
           <div>
@@ -811,6 +811,33 @@ $efektifBadge = function (?string $e): string {
       }
     });
     renderMonevMatrix();
+
+    // Otomatis sesuaikan judul di tabel monev berdasarkan periode matrik risiko yang dipilih
+    const tableTitleEl = document.getElementById('monevTableTitle');
+    if (tableTitleEl) {
+      let label = 'Monev Triwulan 1';
+      if (period === 'awal') {
+        label = 'Monev Kondisi Awal (Baseline KKPR)';
+      } else if (period === 'tw1') {
+        label = 'Monev Triwulan 1';
+      } else if (period === 'tw2') {
+        label = 'Monev Triwulan 2';
+      } else if (period === 'tw3') {
+        label = 'Monev Triwulan 3';
+      } else if (period === 'tw4') {
+        label = 'Monev Triwulan 4';
+      }
+      tableTitleEl.innerHTML = `<i class="fas fa-table"></i> ${label} — Tahun <?= xss($activeTahun) ?>`;
+    }
+
+    const modalTitleEl = document.getElementById('monevModalTitle');
+    if (modalTitleEl && period !== 'awal') {
+      modalTitleEl.innerHTML = `<i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Isi Monev — Monev Triwulan ${period.replace('tw', '')}`;
+    }
+    const formJenisEl = document.getElementById('monevModalFormJenis');
+    if (formJenisEl && period !== 'awal') {
+      formJenisEl.value = period;
+    }
   };
 
   window.renderMonevMatrix = function() {

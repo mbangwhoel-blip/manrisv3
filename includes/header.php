@@ -107,12 +107,12 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
       </button>
       <div class="nav-group-items <?= $isMonevGroupActive ? 'show' : '' ?>">
 
-        <?php if (hasRole('Admin','Risk Manager','Pimpinan','Staff')): ?>
+        <?php if (hasRole('Admin','Risk Manager','Kepala','Pimpinan','Koordinator','Staff')): ?>
         <a href="<?= APP_URL ?>/?page=monev_tahunan" class="nav-item <?= in_array($currentPage, ['monev_triwulan', 'monev_tahunan'])?'active':'' ?>">
           <i class="fas fa-calendar-check"></i><span>Monev Triwulan &amp; Tahunan</span>
         </a>
         <?php endif; ?>
-        <?php if (hasRole('Admin','Risk Manager','Pimpinan','Koordinator')): ?>
+        <?php if (hasRole('Admin','Kepala','Pimpinan','Koordinator')): ?>
         <a href="<?= APP_URL ?>/?page=monev_konsolidasi" class="nav-item <?= $currentPage==='monev_konsolidasi'?'active':'' ?>">
           <i class="fas fa-layer-group"></i><span>Laporan Konsolidasi Monev</span>
         </a>

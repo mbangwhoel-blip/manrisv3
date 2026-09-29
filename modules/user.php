@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
 
         // Validasi role — whitelist
-        $validRoles = ['Admin', 'Risk Manager', 'Staff', 'Pimpinan'];
+        $validRoles = ['Admin', 'Risk Manager', 'Staff', 'Pimpinan', 'Koordinator'];
         if (!in_array($role, $validRoles, true)) {
             setFlash('error', 'Role tidak valid.'); header('Location: '.APP_URL.'/?page=user'); exit;
         }
@@ -150,7 +150,7 @@ $users = $db->query("SELECT id, nama, nip, username, email, role, kode_prefix, a
         <td style="font-size:.82rem"><?= xss($u['email']) ?></td>
         <td>
           <?php
-            $roleCls = ['Admin'=>'badge-danger','Risk Manager'=>'badge-warning','Staff'=>'badge-info'];
+            $roleCls = ['Admin'=>'badge-danger','Risk Manager'=>'badge-warning','Staff'=>'badge-info','Koordinator'=>'badge-primary','Pimpinan'=>'badge-success'];
             echo '<span class="badge '.($roleCls[$u['role']]??'badge-secondary').'">'.xss($u['role']).'</span>';
           ?>
         </td>
@@ -210,7 +210,7 @@ $users = $db->query("SELECT id, nama, nip, username, email, role, kode_prefix, a
         <div class="form-group"><label class="form-label">Email <span class="required">*</span></label><input type="email" name="email" id="uEmail" class="form-control" required></div>
         <div class="form-group"><label class="form-label">Role</label>
           <select name="role" id="uRole" class="form-control">
-            <option>Admin</option><option>Risk Manager</option><option>Pimpinan</option><option>Staff</option>
+            <option>Admin</option><option>Risk Manager</option><option>Pimpinan</option><option>Koordinator</option><option>Staff</option>
           </select>
         </div>
         <div class="form-group" style="position:relative">

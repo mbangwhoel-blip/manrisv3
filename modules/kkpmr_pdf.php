@@ -42,12 +42,7 @@ if ($periode === 'bulan_ini') {
     $periodeLabel = 'Laporan Triwulan ' . $triwulanRomawi[$twTarget - 1];
 }
 
-$pantauHeaderLabel = 'HASIL PEMANTAUAN S.D. AKHIR TAHUN';
-if ($periode === 'bulan_ini') {
-    $pantauHeaderLabel = 'HASIL PEMANTAUAN BULAN INI';
-} elseif ($periode !== 'tahunan') {
-    $pantauHeaderLabel = 'HASIL PEMANTAUAN TRIWULAN ' . $triwulanRomawi[$twTarget - 1];
-}
+$pantauHeaderLabel = 'HASIL PEMANTAUAN';
 
 // ── Data pemantauan per triwulan dari monev_triwulan ───────────
 // Tahunan memakai data Triwulan IV; jika belum ada diisi monev,
