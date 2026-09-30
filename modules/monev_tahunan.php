@@ -10,6 +10,10 @@ require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
 requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Staff');
 $db = getDB();
+$chkReal = $db->query("SHOW COLUMNS FROM monev_triwulan LIKE 'realisasi_pengendalian'");
+if ($chkReal && $chkReal->num_rows === 0) {
+    $db->query("ALTER TABLE monev_triwulan ADD COLUMN realisasi_pengendalian TEXT NULL AFTER upaya_pengendalian");
+}
 
 $activeTahun = trim((string)($_GET['tahun'] ?? date('Y')));
 $tahunList = getDaftarTahun($db, 'kkpr_header', [$activeTahun]);
@@ -50,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksi'] ?? '') === 'simpan_
     $pd = max(1, min(5, (int)($_POST['pantau_d'] ?? 1)));
     $pb = getBobot($pp, $pd); $pNilai = round($pp * $pd * $pb); $pTingkat = getLevelRisiko($pNilai);
     $upaya = trim($_POST['upaya_pengendalian'] ?? '');
+    $realisasi = trim($_POST['realisasi_pengendalian'] ?? '');
     $link = trim($_POST['link_data_dukung'] ?? '');
     $kendala = trim($_POST['kendala'] ?? ''); $rtl = trim($_POST['rencana_tindak_lanjut'] ?? '');
     // Simpulan & efektivitas dibandingkan dengan PENILAIAN AWAL (konsisten dengan
@@ -60,8 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksi'] ?? '') === 'simpan_
     $simpulan = $pNilai < $previousValue ? 'Tingkat risiko mengalami penurunan' : ($pNilai > $previousValue ? 'Tingkat risiko mengalami peningkatan' : 'Tingkat risiko tetap');
     $efektifitas = $pNilai < $previousValue ? 'Efektif' : 'Tidak Efektif';
     $uid = (int)$_SESSION['user_id'];
-    $upsert = $db->prepare('INSERT INTO monev_triwulan (id_risiko,triwulan,pantau_p,pantau_d,pantau_bobot,pantau_nilai,pantau_tingkat,upaya_pengendalian,link_data_dukung,simpulan_tingkat,efektifitas,kendala,rencana_tindak_lanjut,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE pantau_p=VALUES(pantau_p),pantau_d=VALUES(pantau_d),pantau_bobot=VALUES(pantau_bobot),pantau_nilai=VALUES(pantau_nilai),pantau_tingkat=VALUES(pantau_tingkat),upaya_pengendalian=VALUES(upaya_pengendalian),link_data_dukung=VALUES(link_data_dukung),simpulan_tingkat=VALUES(simpulan_tingkat),efektifitas=VALUES(efektifitas),kendala=VALUES(kendala),rencana_tindak_lanjut=VALUES(rencana_tindak_lanjut),created_by=VALUES(created_by)');
-    $upsert->bind_param('iiiddssssssssi', $idRisiko, $twPost, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
+    $upsert = $db->prepare('INSERT INTO monev_triwulan (id_risiko,triwulan,pantau_p,pantau_d,pantau_bobot,pantau_nilai,pantau_tingkat,upaya_pengendalian,realisasi_pengendalian,link_data_dukung,simpulan_tingkat,efektifitas,kendala,rencana_tindak_lanjut,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE pantau_p=VALUES(pantau_p),pantau_d=VALUES(pantau_d),pantau_bobot=VALUES(pantau_bobot),pantau_nilai=VALUES(pantau_nilai),pantau_tingkat=VALUES(pantau_tingkat),upaya_pengendalian=VALUES(upaya_pengendalian),realisasi_pengendalian=VALUES(realisasi_pengendalian),link_data_dukung=VALUES(link_data_dukung),simpulan_tingkat=VALUES(simpulan_tingkat),efektifitas=VALUES(efektifitas),kendala=VALUES(kendala),rencana_tindak_lanjut=VALUES(rencana_tindak_lanjut),created_by=VALUES(created_by)');
+    $upsert->bind_param('iiiddsssssssssi', $idRisiko, $twPost, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
     $upsert->execute(); $upsert->close();
     setFlash('success', 'Monev berhasil disimpan.');
     header('Location: ' . APP_URL . '/?page=monev_tahunan&tahun=' . urlencode($tahunPost) . '&jenis=' . urlencode($jenisPost) . '#monev-table'); exit;
@@ -173,12 +178,20 @@ foreach ($allTwRows as $twItem) {
     $twByRisk[(int)$twItem['triwulan']][(int)$twItem['id_risiko']] = $twItem;
 }
 
+$emptyLevels = [
+    'Sangat Tinggi' => 0,
+    'Tinggi'        => 0,
+    'Sedang'        => 0,
+    'Rendah'        => 0,
+    'Sangat Rendah' => 0,
+];
+
 $matrixData = [
-    'awal' => ['label' => 'Kondisi Awal (Baseline KKPR)', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw1'  => ['label' => 'Triwulan 1', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw2'  => ['label' => 'Triwulan 2', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw3'  => ['label' => 'Triwulan 3', 'counts' => [], 'items' => [], 'total' => 0],
-    'tw4'  => ['label' => 'Triwulan 4', 'counts' => [], 'items' => [], 'total' => 0],
+    'awal' => ['label' => 'Kondisi Awal (Baseline KKPR)', 'counts' => [], 'items' => [], 'total' => 0, 'levels' => $emptyLevels],
+    'tw1'  => ['label' => 'Triwulan 1', 'counts' => [], 'items' => [], 'total' => 0, 'levels' => $emptyLevels],
+    'tw2'  => ['label' => 'Triwulan 2', 'counts' => [], 'items' => [], 'total' => 0, 'levels' => $emptyLevels],
+    'tw3'  => ['label' => 'Triwulan 3', 'counts' => [], 'items' => [], 'total' => 0, 'levels' => $emptyLevels],
+    'tw4'  => ['label' => 'Triwulan 4', 'counts' => [], 'items' => [], 'total' => 0, 'levels' => $emptyLevels],
 ];
 
 for ($p = 1; $p <= 5; $p++) {
@@ -195,8 +208,11 @@ foreach ($rows as $r) {
     $p = max(1, min(5, (int)($r['probabilitas'] ?? 1)));
     $d = max(1, min(5, (int)($r['dampak_level'] ?? 1)));
     $skor = (int)round((float)($r['nilai_risiko'] ?? ($p * $d * getBobot($p, $d))));
-    $level = $r['tingkat_risiko'] ?: getLevelRisiko($skor);
+    $level = trim((string)($r['tingkat_risiko'] ?: getLevelRisiko($skor)));
     $matrixData['awal']['counts'][$p][$d]++;
+    if (isset($matrixData['awal']['levels'][$level])) {
+        $matrixData['awal']['levels'][$level]++;
+    }
     $matrixData['awal']['items'][$p][$d][] = [
         'id' => $r['id'],
         'kode' => $r['kode_risiko'] ?: '-',
@@ -220,8 +236,11 @@ for ($tw = 1; $tw <= 4; $tw++) {
             $p = max(1, min(5, (int)$twData['pantau_p']));
             $d = max(1, min(5, (int)$twData['pantau_d']));
             $skor = (int)round((float)$twData['pantau_nilai']);
-            $level = $twData['pantau_tingkat'] ?: getLevelRisiko($skor);
+            $level = trim((string)($twData['pantau_tingkat'] ?: getLevelRisiko($skor)));
             $matrixData[$k]['counts'][$p][$d]++;
+            if (isset($matrixData[$k]['levels'][$level])) {
+                $matrixData[$k]['levels'][$level]++;
+            }
             $matrixData[$k]['items'][$p][$d][] = [
                 'id' => $r['id'],
                 'kode' => $r['kode_risiko'] ?: '-',
@@ -255,13 +274,37 @@ foreach ([1, 2, 3, 4, 5] as $bp) foreach ([1, 2, 3, 4, 5] as $bd) $bobotJs[$bp][
 $jsRows = [];
 foreach ($rows as $r) {
     $c = $r['curr'];
+
+    // Upaya Pengendalian: jika TW aktif belum terisi, otomatis prefill dari triwulan sebelumnya (TW n-1 .. TW 1) atau KKPR
+    $upayaPrefill = '';
+    if ($c && !empty(trim((string)($c['upaya_pengendalian'] ?? '')))) {
+        $upayaPrefill = (string)$c['upaya_pengendalian'];
+    } else {
+        $searchTw = ($jenisLaporan === 'tahunan') ? 4 : $twTarget;
+        for ($t = $searchTw; $t >= 1; $t--) {
+            $prevUpaya = $twByRisk[$t][$r['id']]['upaya_pengendalian'] ?? null;
+            if ($prevUpaya !== null && trim((string)$prevUpaya) !== '') {
+                $upayaPrefill = (string)$prevUpaya;
+                break;
+            }
+        }
+        if ($upayaPrefill === '') {
+            if (!empty($r['pengendalian_uraian']) && trim((string)$r['pengendalian_uraian']) !== '') {
+                $upayaPrefill = (string)$r['pengendalian_uraian'];
+            } elseif (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '') {
+                $upayaPrefill = (string)$r['rpti_uraian'];
+            }
+        }
+    }
+
     $jsRows[] = [
         'id'    => (int)$r['id'],
         'nama'  => (string)$r['nama_risiko'],
         'unit'  => (string)($r['unit_pemilik_risiko'] ?? ''),
         'p'     => $c ? (int)$c['pantau_p'] : ($r['prevq'] ? (int)$r['prevq']['pantau_p'] : (int)$r['prev_p']),
         'd'     => $c ? (int)$c['pantau_d'] : ($r['prevq'] ? (int)$r['prevq']['pantau_d'] : (int)$r['prev_d']),
-        'upaya' => (string)($c['upaya_pengendalian'] ?? ''),
+        'upaya' => $upayaPrefill,
+        'realisasi' => (string)($c['realisasi_pengendalian'] ?? ''),
         'link'  => (string)($c['link_data_dukung'] ?? ''),
         'kendala' => (string)($c['kendala'] ?? ''),
         'rtl'   => (string)($c['rencana_tindak_lanjut'] ?? ''),
@@ -367,22 +410,45 @@ $efektifBadge = function (?string $e): string {
 <!-- Banner keterangan ringkas (di luar hero) -->
 <?php
   $insCls = ''; $insIcon = 'fa-circle-info';
-  if ($chartStats['eskalasi'] > 0) { $insCls = 'bad'; $insIcon = 'fa-triangle-exclamation'; }
-  elseif ($chartStats['belum'] > 0) { $insCls = 'warn'; $insIcon = 'fa-clock'; }
-  else { $insIcon = 'fa-circle-check'; }
+  $insFilter = '';
+  if ($chartStats['eskalasi'] > 0) {
+    $insCls = 'bad'; $insIcon = 'fa-triangle-exclamation'; $insFilter = 'eskalasi';
+  } elseif ($chartStats['belum'] > 0) {
+    $insCls = 'warn'; $insIcon = 'fa-clock'; $insFilter = 'belum';
+  } else {
+    $insIcon = 'fa-circle-check'; $insFilter = ($chartStats['penurunan'] > 0) ? 'penurunan' : '';
+  }
 ?>
-<div class="monev-insight <?= $insCls ?>" style="margin-top:18px">
+<div class="monev-insight <?= $insCls ?> <?= $insFilter ? 'is-clickable' : '' ?>"
+     <?= $insFilter ? 'onclick="triggerBannerFilter(\'' . $insFilter . '\')"' : '' ?>
+     <?= $insFilter ? 'title="Klik untuk langsung melihat daftar risiko ini pada tabel di bawah"' : '' ?>
+     style="margin-top:18px">
   <i class="fas <?= $insIcon ?>"></i>
-  <div class="ins-text">
+  <div class="ins-text" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;width:100%">
+    <div style="flex:1 1 320px;min-width:0">
+      <?php if ($chartStats['eskalasi'] > 0): ?>
+        <strong><?= $chartStats['eskalasi'] ?> risiko mengalami eskalasi skor</strong> pada <?= xss($jenisLabel) ?> — prioritaskan evaluasi ulang pengendalian.
+      <?php elseif ($chartStats['belum'] > 0): ?>
+        <strong><?= $chartStats['belum'] ?> dari <?= $chartStats['total'] ?> risiko belum dipantau</strong> pada periode ini.<?= $canInput ? ' Klik "Isi Monev" pada baris tabel untuk mengisi.' : '' ?>
+      <?php else: ?>
+        <strong>Semua risiko telah dipantau</strong> — <?= $pctEfektif ?>% pengendalian efektif, <?= $chartStats['penurunan'] ?> risiko mengalami penurunan skor.
+      <?php endif; ?>
+      <?php if ($chartStats['terpantau'] > 0): ?>
+        Rata-rata skor: <strong><?= $chartAvgBaseline ?></strong> &rarr; <strong><?= $chartAvgCurrent ?></strong> (<strong><?= $selisihAvg > 0 ? '&darr; ' . abs($selisihAvg) : ($selisihAvg < 0 ? '&uarr; ' . abs($selisihAvg) : '= 0') ?></strong>).
+      <?php endif; ?>
+    </div>
     <?php if ($chartStats['eskalasi'] > 0): ?>
-      <strong><?= $chartStats['eskalasi'] ?> risiko mengalami eskalasi skor</strong> pada <?= xss($jenisLabel) ?> — prioritaskan evaluasi ulang pengendalian.
+      <span class="btn btn-sm btn-danger monev-banner-btn" style="pointer-events:none">
+        <i class="fas fa-arrow-up"></i> Lihat <?= $chartStats['eskalasi'] ?> Risiko Eskalasi &rarr;
+      </span>
     <?php elseif ($chartStats['belum'] > 0): ?>
-      <strong><?= $chartStats['belum'] ?> dari <?= $chartStats['total'] ?> risiko belum dipantau</strong> pada periode ini.<?= $canInput ? ' Klik "Isi Monev" pada baris tabel untuk mengisi.' : '' ?>
-    <?php else: ?>
-      <strong>Semua risiko telah dipantau</strong> — <?= $pctEfektif ?>% pengendalian efektif, <?= $chartStats['penurunan'] ?> risiko mengalami penurunan skor.
-    <?php endif; ?>
-    <?php if ($chartStats['terpantau'] > 0): ?>
-      Rata-rata skor: <strong><?= $chartAvgBaseline ?></strong> &rarr; <strong><?= $chartAvgCurrent ?></strong> (<strong><?= $selisihAvg > 0 ? '&darr; ' . abs($selisihAvg) : ($selisihAvg < 0 ? '&uarr; ' . abs($selisihAvg) : '= 0') ?></strong>).
+      <span class="btn btn-sm btn-outline monev-banner-btn" style="pointer-events:none; border-color:var(--warning); color:#b45309">
+        <i class="fas fa-clock"></i> Lihat <?= $chartStats['belum'] ?> Belum Dipantau &rarr;
+      </span>
+    <?php elseif ($chartStats['penurunan'] > 0): ?>
+      <span class="btn btn-sm btn-outline monev-banner-btn" style="pointer-events:none; border-color:var(--accent); color:var(--accent)">
+        <i class="fas fa-arrow-down"></i> Lihat <?= $chartStats['penurunan'] ?> Penurunan &rarr;
+      </span>
     <?php endif; ?>
   </div>
 </div>
@@ -404,83 +470,204 @@ $efektifBadge = function (?string $e): string {
   $tingkatShort = fn($s) => $s>=20?'Sangat Tinggi':($s>=15?'Tinggi':($s>=10?'Sedang':($s>=5?'Rendah':'Sangat Rendah')));
   $activeMatrixPeriod = $jenisLaporan === 'tahunan' ? 'tw4' : ($jenisLaporan === 'tw1' ? 'tw1' : ($jenisLaporan === 'tw2' ? 'tw2' : ($jenisLaporan === 'tw3' ? 'tw3' : 'tw4')));
 ?>
-<!-- Matriks Risiko 5x5 Interaktif Pemantauan Triwulanan -->
-<div class="card" style="margin-bottom:20px;display:flex;flex-direction:column">
-  <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.06),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 20px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <div style="width:36px;height:36px;border-radius:10px;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.15rem">
-        <i class="fas fa-th"></i>
+<!-- ── Grid 2-Kolom: Matriks Risiko 5x5 & Distribusi Tingkat Risiko (Opsi 1) ── -->
+<div class="monev-matrix-analytics-grid">
+  <!-- Kolom Kiri: Matriks Risiko 5x5 Interaktif -->
+  <div class="card monev-matrix-card" style="margin-bottom:0;display:flex;flex-direction:column;height:100%">
+    <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.06),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.15rem">
+          <i class="fas fa-th"></i>
+        </div>
+        <div>
+          <span class="card-title" style="margin:0;font-size:1.05rem;font-weight:800"><i class="fas fa-table-cells" style="color:var(--accent);margin-right:4px"></i> Matriks Risiko 5&times;5</span>
+          <div id="matrixSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+            Periode aktif: <strong id="matrixPeriodLabel" style="color:var(--accent)">Triwulan <?= $twTarget ?></strong> &bull; <span id="matrixCountInfo">Memuat data...</span>
+          </div>
+        </div>
       </div>
-      <div>
-        <span class="card-title" style="margin:0;font-size:1.05rem;font-weight:800"><i class="fas fa-table-cells" style="color:var(--accent);margin-right:4px"></i> Matriks Risiko 5&times;5</span>
-        <div id="matrixSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
-          Periode aktif: <strong id="matrixPeriodLabel" style="color:var(--accent)">Triwulan <?= $twTarget ?></strong> &bull; <span id="matrixCountInfo">Memuat data...</span>
+
+      <!-- Switcher Periode Triwulanan (Dropdown Ringkas & Rapi) -->
+      <div class="monev-matrix-tabs">
+        <label for="monevPeriodSelect" class="matrix-period-label" style="margin-bottom:0">
+          <i class="fas fa-sliders"></i> Pantau Periode:
+        </label>
+        <div class="matrix-select-wrap">
+          <select id="monevPeriodSelect" class="form-control matrix-period-select" onchange="switchMonevPeriod(this.value)">
+            <option value="awal" <?= $activeMatrixPeriod==='awal'?'selected':'' ?>>Kondisi Awal</option>
+            <option value="tw1" <?= $activeMatrixPeriod==='tw1'?'selected':'' ?>>Triwulan 1</option>
+            <option value="tw2" <?= $activeMatrixPeriod==='tw2'?'selected':'' ?>>Triwulan 2</option>
+            <option value="tw3" <?= $activeMatrixPeriod==='tw3'?'selected':'' ?>>Triwulan 3</option>
+            <option value="tw4" <?= $activeMatrixPeriod==='tw4'?'selected':'' ?>>Triwulan 4</option>
+          </select>
         </div>
       </div>
     </div>
 
-    <!-- Switcher Periode Triwulanan (Bisa dipantau / klik tiap triwulan) -->
-    <div class="monev-matrix-tabs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <span style="font-size:.76rem;font-weight:700;color:var(--text-muted);margin-right:2px"><i class="fas fa-sliders"></i> Pantau Periode:</span>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='awal'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="awal" onclick="switchMonevPeriod('awal')">Kondisi Awal</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw1'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw1" onclick="switchMonevPeriod('tw1')">Triwulan 1</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw2'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw2" onclick="switchMonevPeriod('tw2')">Triwulan 2</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw3'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw3" onclick="switchMonevPeriod('tw3')">Triwulan 3</button>
-      <button type="button" class="btn btn-sm <?= $activeMatrixPeriod==='tw4'?'btn-primary':'btn-outline' ?> matrix-period-btn" data-period="tw4" onclick="switchMonevPeriod('tw4')">Triwulan 4</button>
+    <div class="card-body heatmap-wrap compact-heatmap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;text-align:center">
+      <table class="heatmap dashboard-heatmap-table" id="monevHeatmapTable">
+        <thead>
+          <tr>
+            <th style="text-align:right;padding-right:8px;font-weight:800;color:var(--text-muted)">P \ D</th>
+            <?php for($d=1;$d<=5;$d++): ?>
+              <th title="D<?= $d ?> = <?= $dLabels[$d] ?>" style="font-weight:800">D<?= $d ?></th>
+            <?php endfor; ?>
+          </tr>
+        </thead>
+        <tbody>
+          <?php for($p=5;$p>=1;$p--): ?>
+          <tr>
+            <th style="text-align:right;padding-right:8px;color:var(--text-muted);font-size:.7rem;font-weight:800" title="P<?= $p ?> = <?= $pLabels[$p] ?>">P<?= $p ?></th>
+            <?php for($d=1;$d<=5;$d++): ?>
+            <?php
+              $skor = (int)round($p * $d * getBobot($p,$d));
+              $bg   = heatmapColor($p,$d);
+              $tks  = $tingkatShort($skor);
+              $fg   = ($skor>=10 && $skor<=14) ? '#000' : '#fff';
+            ?>
+            <td id="mcell_<?= $p ?>_<?= $d ?>"
+                data-p="<?= $p ?>" data-d="<?= $d ?>" data-skor="<?= $skor ?>"
+                style="background:<?= $bg ?>;color:<?= $fg ?>;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;"
+                title="P<?= $p ?> (<?= $pLabels[$p] ?>) &times; D<?= $d ?> (<?= $dLabels[$d] ?>) &times; Bobot <?= getBobot($p,$d) ?> = <?= $skor ?> &rarr; <?= $tks ?>"
+                onclick="clickMonevCell(<?= $p ?>, <?= $d ?>, <?= $skor ?>)"
+                onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 6px 16px rgba(0,0,0,.25)'"
+                onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">
+              <div style="font-size:1.15rem;font-weight:900;line-height:1"><?= $skor ?></div>
+              <div style="font-size:.56rem;font-weight:700;opacity:.88;line-height:1.1;margin-top:2px;white-space:normal;word-wrap:break-word;text-align:center"><?= $tks ?></div>
+              <span class="count-badge" id="mbadge_<?= $p ?>_<?= $d ?>" style="display:none">0</span>
+            </td>
+            <?php endfor; ?>
+          </tr>
+          <?php endfor; ?>
+        </tbody>
+      </table>
+
+      <div class="heatmap-legend compact-heatmap-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px">
+        <div style="font-size:.7rem;color:var(--text-muted);font-weight:700;margin-bottom:4px;width:100%;text-align:center">Nilai = P &times; D &times; Bobot</div>
+        <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#dc2626;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Tinggi (&ge; 20)</div>
+        <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#f97316;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Tinggi (15&ndash;19)</div>
+        <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#FFFF00;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sedang (10&ndash;14)</div>
+        <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#22c55e;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Rendah (5&ndash;9)</div>
+        <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#3b82f6;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Rendah (1&ndash;4)</div>
+      </div>
+
+      <div class="heatmap-desc" style="margin-top:10px;font-size:.68rem;color:var(--text-muted);text-align:center;line-height:1.6;width:100%">
+        <strong>P</strong> = Probabilitas (1=Jarang, 2=Kecil, 3=Sedang, 4=Besar, 5=Hampir Pasti)<br>
+        <strong>D</strong> = Dampak (1=Tidak Signifikan, 2=Kecil, 3=Sedang, 4=Besar, 5=Katastropik)<br>
+        <span style="font-size:.64rem;opacity:.85;display:inline-block;margin-top:4px"><i class="fas fa-hand-pointer"></i> Klik sel untuk melihat daftar risiko di area tersebut &bull; Klik tombol triwulan di atas untuk memantau pergeseran risiko tiap periode.</span>
+      </div>
     </div>
   </div>
 
-  <div class="card-body heatmap-wrap compact-heatmap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;text-align:center">
-    <table class="heatmap dashboard-heatmap-table" id="monevHeatmapTable">
-      <thead>
-        <tr>
-          <th style="text-align:right;padding-right:8px;font-weight:800;color:var(--text-muted)">P \ D</th>
-          <?php for($d=1;$d<=5;$d++): ?>
-            <th title="D<?= $d ?> = <?= $dLabels[$d] ?>" style="font-weight:800">D<?= $d ?></th>
-          <?php endfor; ?>
-        </tr>
-      </thead>
-      <tbody>
-        <?php for($p=5;$p>=1;$p--): ?>
-        <tr>
-          <th style="text-align:right;padding-right:8px;color:var(--text-muted);font-size:.7rem;font-weight:800" title="P<?= $p ?> = <?= $pLabels[$p] ?>">P<?= $p ?></th>
-          <?php for($d=1;$d<=5;$d++): ?>
-          <?php
-            $skor = (int)round($p * $d * getBobot($p,$d));
-            $bg   = heatmapColor($p,$d);
-            $tks  = $tingkatShort($skor);
-            $fg   = ($skor>=10 && $skor<=14) ? '#000' : '#fff';
-          ?>
-          <td id="mcell_<?= $p ?>_<?= $d ?>"
-              data-p="<?= $p ?>" data-d="<?= $d ?>" data-skor="<?= $skor ?>"
-              style="background:<?= $bg ?>;color:<?= $fg ?>;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;"
-              title="P<?= $p ?> (<?= $pLabels[$p] ?>) &times; D<?= $d ?> (<?= $dLabels[$d] ?>) &times; Bobot <?= getBobot($p,$d) ?> = <?= $skor ?> &rarr; <?= $tks ?>"
-              onclick="clickMonevCell(<?= $p ?>, <?= $d ?>, <?= $skor ?>)"
-              onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 6px 16px rgba(0,0,0,.25)'"
-              onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">
-            <div style="font-size:1.15rem;font-weight:900;line-height:1"><?= $skor ?></div>
-            <div style="font-size:.56rem;font-weight:700;opacity:.88;line-height:1.1;margin-top:2px;white-space:normal;word-wrap:break-word;text-align:center"><?= $tks ?></div>
-            <span class="count-badge" id="mbadge_<?= $p ?>_<?= $d ?>" style="display:none">0</span>
-          </td>
-          <?php endfor; ?>
-        </tr>
-        <?php endfor; ?>
-      </tbody>
-    </table>
-
-    <div class="heatmap-legend compact-heatmap-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px">
-      <div style="font-size:.7rem;color:var(--text-muted);font-weight:700;margin-bottom:4px;width:100%;text-align:center">Nilai = P &times; D &times; Bobot</div>
-      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#dc2626;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Tinggi (&ge; 20)</div>
-      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#f97316;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Tinggi (15&ndash;19)</div>
-      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#FFFF00;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sedang (10&ndash;14)</div>
-      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#22c55e;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Rendah (5&ndash;9)</div>
-      <div class="legend-item" style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text-muted)"><span class="legend-dot" style="background:#3b82f6;display:inline-block;width:10px;height:10px;border-radius:50%"></span>Sangat Rendah (1&ndash;4)</div>
+  <!-- Kolom Kanan: Distribusi Tingkat Risiko & Donut Chart (Opsi 1) -->
+  <div class="card monev-analytics-card" style="margin-bottom:0;display:flex;flex-direction:column;height:100%">
+    <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.06),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:1.15rem">
+          <i class="fas fa-chart-pie"></i>
+        </div>
+        <div>
+          <span class="card-title" style="margin:0;font-size:1.05rem;font-weight:800"><i class="fas fa-chart-pie" style="color:var(--accent);margin-right:4px"></i> Distribusi Tingkat Risiko</span>
+          <div id="analyticsSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+            Periode: <strong id="analyticsPeriodLabel" style="color:var(--accent)">Triwulan <?= $twTarget ?></strong> &bull; <span id="analyticsTotalBadge">0 Risiko Terpantau</span>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline" id="btnResetLevelFilter" style="display:none;font-size:.72rem;padding:4px 10px;gap:5px;align-items:center" onclick="clearLevelFilter()" title="Hapus filter tingkat risiko">
+        <i class="fas fa-rotate-left"></i> Reset Filter
+      </button>
     </div>
 
-    <div class="heatmap-desc" style="margin-top:10px;font-size:.68rem;color:var(--text-muted);text-align:center;line-height:1.6;width:100%">
-      <strong>P</strong> = Probabilitas (1=Jarang, 2=Kecil, 3=Sedang, 4=Besar, 5=Hampir Pasti)<br>
-      <strong>D</strong> = Dampak (1=Tidak Signifikan, 2=Kecil, 3=Sedang, 4=Besar, 5=Katastropik)<br>
-      <span style="font-size:.64rem;opacity:.85;display:inline-block;margin-top:4px"><i class="fas fa-hand-pointer"></i> Klik sel untuk melihat daftar risiko di area tersebut &bull; Klik tombol triwulan di atas untuk memantau pergeseran risiko tiap periode.</span>
+    <div class="card-body monev-analytics-body" style="padding:16px 20px;display:flex;flex-direction:column;justify-content:space-between;flex:1;gap:14px">
+      <div class="monev-analytics-body-content">
+        <!-- Donut Chart -->
+        <div class="monev-donut-wrapper">
+          <div class="monev-donut-canvas-box">
+            <canvas id="monevLevelDonut"></canvas>
+            <div id="donutCenterInfo" class="monev-donut-center-info">
+              <div id="donutCenterTotal" class="donut-center-num">0</div>
+              <div class="donut-center-label">Risiko</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5 Level Stat Cards / Breakdown -->
+        <div class="monev-level-cards-list">
+          <div class="monev-level-card card-st" data-level="Sangat Tinggi" onclick="filterByRiskLevel('Sangat Tinggi')" role="button" tabindex="0" title="Klik untuk memfilter risiko Sangat Tinggi">
+            <div class="level-info">
+              <span class="level-dot" style="background:#dc2626"></span>
+              <div>
+                <div class="level-name">Sangat Tinggi</div>
+                <div class="level-range">&ge; 20</div>
+              </div>
+            </div>
+            <div class="level-metrics">
+              <span class="level-count-badge" id="lvlCount_ST">0</span>
+              <span class="level-pct" id="lvlPct_ST">0%</span>
+            </div>
+          </div>
+
+          <div class="monev-level-card card-t" data-level="Tinggi" onclick="filterByRiskLevel('Tinggi')" role="button" tabindex="0" title="Klik untuk memfilter risiko Tinggi">
+            <div class="level-info">
+              <span class="level-dot" style="background:#ea580c"></span>
+              <div>
+                <div class="level-name">Tinggi</div>
+                <div class="level-range">15 &ndash; 19</div>
+              </div>
+            </div>
+            <div class="level-metrics">
+              <span class="level-count-badge" id="lvlCount_T">0</span>
+              <span class="level-pct" id="lvlPct_T">0%</span>
+            </div>
+          </div>
+
+          <div class="monev-level-card card-s" data-level="Sedang" onclick="filterByRiskLevel('Sedang')" role="button" tabindex="0" title="Klik untuk memfilter risiko Sedang">
+            <div class="level-info">
+              <span class="level-dot" style="background:#eab308"></span>
+              <div>
+                <div class="level-name">Sedang</div>
+                <div class="level-range">10 &ndash; 14</div>
+              </div>
+            </div>
+            <div class="level-metrics">
+              <span class="level-count-badge" id="lvlCount_S">0</span>
+              <span class="level-pct" id="lvlPct_S">0%</span>
+            </div>
+          </div>
+
+          <div class="monev-level-card card-r" data-level="Rendah" onclick="filterByRiskLevel('Rendah')" role="button" tabindex="0" title="Klik untuk memfilter risiko Rendah">
+            <div class="level-info">
+              <span class="level-dot" style="background:#16a34a"></span>
+              <div>
+                <div class="level-name">Rendah</div>
+                <div class="level-range">5 &ndash; 9</div>
+              </div>
+            </div>
+            <div class="level-metrics">
+              <span class="level-count-badge" id="lvlCount_R">0</span>
+              <span class="level-pct" id="lvlPct_R">0%</span>
+            </div>
+          </div>
+
+          <div class="monev-level-card card-sr" data-level="Sangat Rendah" onclick="filterByRiskLevel('Sangat Rendah')" role="button" tabindex="0" title="Klik untuk memfilter risiko Sangat Rendah">
+            <div class="level-info">
+              <span class="level-dot" style="background:#2563eb"></span>
+              <div>
+                <div class="level-name">Sangat Rendah</div>
+                <div class="level-range">1 &ndash; 4</div>
+              </div>
+            </div>
+            <div class="level-metrics">
+              <span class="level-count-badge" id="lvlCount_SR">0</span>
+              <span class="level-pct" id="lvlPct_SR">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="monev-analytics-hint">
+        <i class="fas fa-hand-pointer"></i> Klik salah satu kartu level atau potongan grafik untuk memfilter tabel di bawah
+      </div>
     </div>
   </div>
 </div>
@@ -513,22 +700,26 @@ $efektifBadge = function (?string $e): string {
   <div class="monev-scroll-wrap">
     <table class="data-table profil-detail-table monev-data-table no-datatable" id="tableMonevTahunan">
       <colgroup>
-        <col style="width:36px"><col style="width:72px"><col style="min-width:220px">
-        <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:84px">
-        <?php if ($showPrevQ): ?><col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:84px"><?php endif; ?>
-        <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:62px"><col style="width:84px">
-        <col style="width:88px"><col style="width:104px">
+        <col style="width:36px"><col style="width:72px"><col style="min-width:200px">
+        <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:106px">
+        <?php if ($showPrevQ): ?><col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:50px"><col style="width:106px"><?php endif; ?>
+        <col style="min-width:180px">
+        <col style="width:32px"><col style="width:32px"><col style="width:52px"><col style="width:62px"><col style="width:106px">
+        <col style="width:100px"><col style="width:104px">
+        <col style="width:140px">
         <?php if ($canInput): ?><col style="width:80px"><?php endif; ?>
       </colgroup>
       <thead>
         <tr>
           <th rowspan="2" class="col-no" style="text-align:center">No</th>
           <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
-          <th rowspan="2" class="col-risk">Risiko &amp; Unit Kerja</th>
+          <th rowspan="2" class="col-risk" style="text-align:center">Risiko &amp; Unit Kerja</th>
           <th colspan="5" style="text-align:center;background:rgba(100,116,139,.07)">Kondisi Awal</th>
           <?php if ($showPrevQ): ?><th colspan="5" style="text-align:center;background:rgba(148,163,184,.12)">Kondisi Triwulan <?= $twTarget - 1 ?></th><?php endif; ?>
+          <th rowspan="2" style="text-align:center;background:rgba(100,116,139,.04);white-space:normal;line-height:1.2">Upaya Pengendalian</th>
           <th colspan="5" style="text-align:center;background:rgba(59,130,246,.08)">Kondisi Saat Ini</th>
           <th colspan="2" style="text-align:center;background:rgba(124,58,237,.07)">Simpulan</th>
+          <th rowspan="2" class="col-status" style="text-align:center;white-space:normal;line-height:1.2">Status</th>
           <?php if ($canInput): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
         <tr>
@@ -540,11 +731,17 @@ $efektifBadge = function (?string $e): string {
       </thead>
       <tbody>
         <?php if (empty($rows)): ?>
-        <tr><td colspan="<?= ($canInput ? 16 : 15) + ($showPrevQ ? 5 : 0) ?>" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($activeTahun) ?>.</td></tr>
+        <tr><td colspan="<?= ($canInput ? 18 : 17) + ($showPrevQ ? 5 : 0) ?>" style="text-align:center;padding:36px;color:var(--text-muted)">Belum ada data risiko untuk tahun <?= xss($activeTahun) ?>.</td></tr>
         <?php endif; ?>
         <?php foreach ($rows as $i => $r): $c = $r['curr'];
           $delta = ($c && $c['pantau_nilai'] !== null) ? (float)$r['prev_nilai'] - (float)$c['pantau_nilai'] : null;
           $searchIdx = mb_strtolower(($r['unit_pemilik_risiko'] ?? '') . ' ' . ($r['nama_risiko'] ?? '') . ' ' . ($r['kode_risiko'] ?? ''));
+          $lvlAwal = trim((string)($r['prev_tingkat'] ?: ($r['tingkat_risiko'] ?: '')));
+          $lvlTw1 = (isset($twByRisk[1][$r['id']]) && $twByRisk[1][$r['id']]['pantau_nilai'] !== null) ? trim((string)($twByRisk[1][$r['id']]['pantau_tingkat'] ?: getLevelRisiko((int)round((float)$twByRisk[1][$r['id']]['pantau_nilai'])))) : '';
+          $lvlTw2 = (isset($twByRisk[2][$r['id']]) && $twByRisk[2][$r['id']]['pantau_nilai'] !== null) ? trim((string)($twByRisk[2][$r['id']]['pantau_tingkat'] ?: getLevelRisiko((int)round((float)$twByRisk[2][$r['id']]['pantau_nilai'])))) : '';
+          $lvlTw3 = (isset($twByRisk[3][$r['id']]) && $twByRisk[3][$r['id']]['pantau_nilai'] !== null) ? trim((string)($twByRisk[3][$r['id']]['pantau_tingkat'] ?: getLevelRisiko((int)round((float)$twByRisk[3][$r['id']]['pantau_nilai'])))) : '';
+          $lvlTw4 = (isset($twByRisk[4][$r['id']]) && $twByRisk[4][$r['id']]['pantau_nilai'] !== null) ? trim((string)($twByRisk[4][$r['id']]['pantau_tingkat'] ?: getLevelRisiko((int)round((float)$twByRisk[4][$r['id']]['pantau_nilai'])))) : '';
+          $lvlCurr = ($c && $c['pantau_nilai'] !== null) ? trim((string)($c['pantau_tingkat'] ?: getLevelRisiko((int)round((float)$c['pantau_nilai'])))) : '';
         ?>
         <tr class="monev-row"
             data-unit="<?= xss($r['unit_pemilik_risiko'] ?? '') ?>"
@@ -552,7 +749,13 @@ $efektifBadge = function (?string $e): string {
             data-terisi="<?= $c ? 1 : 0 ?>"
             data-efektif="<?= ($c && ($c['efektifitas'] ?? '') === 'Efektif') ? 1 : 0 ?>"
             data-naik="<?= ($delta !== null && $delta < 0) ? 1 : 0 ?>"
-            data-turun="<?= ($delta !== null && $delta > 0) ? 1 : 0 ?>">
+            data-turun="<?= ($delta !== null && $delta > 0) ? 1 : 0 ?>"
+            data-level-awal="<?= xss($lvlAwal) ?>"
+            data-level-tw1="<?= xss($lvlTw1) ?>"
+            data-level-tw2="<?= xss($lvlTw2) ?>"
+            data-level-tw3="<?= xss($lvlTw3) ?>"
+            data-level-tw4="<?= xss($lvlTw4) ?>"
+            data-level-curr="<?= xss($lvlCurr) ?>">
           <td style="text-align:center;font-weight:600;color:var(--text-muted)"><?= $i + 1 ?></td>
           <td style="text-align:center;white-space:nowrap"><span class="badge-kode-risiko"><?= xss($r['kode_risiko'] ?? '-') ?></span></td>
           <td>
@@ -576,6 +779,7 @@ $efektifBadge = function (?string $e): string {
           <td style="text-align:center;font-weight:700;<?= $pq ? '' : 'color:var(--text-muted)' ?>"><?= $pq ? round((float)$pq['pantau_nilai']) : '–' ?></td>
           <td style="text-align:center"><?= $levelPill($pq['pantau_tingkat'] ?? null) ?></td>
           <?php endif; ?>
+          <td style="font-size:.76rem;line-height:1.4"><?= !empty($jsRows[$i]['upaya']) ? nl2br(xss($jsRows[$i]['upaya'])) : '<span style="color:var(--text-muted)">–</span>' ?></td>
           <?php if ($c): ?>
           <td style="text-align:center"><?= (int)$c['pantau_p'] ?></td>
           <td style="text-align:center"><?= (int)$c['pantau_d'] ?></td>
@@ -594,6 +798,31 @@ $efektifBadge = function (?string $e): string {
           <?php endif; ?>
           <td style="text-align:center"><?= $simpulanBadge($c['simpulan_tingkat'] ?? null) ?></td>
           <td style="text-align:center"><?= $efektifBadge($c['efektifitas'] ?? null) ?></td>
+          <?php
+            $stLabel = '–';
+            $stDesc = '';
+            $stBadgeCls = '';
+            if ($c && $c['pantau_nilai'] !== null) {
+                $pTingkat = trim((string)($c['pantau_tingkat'] ?? ''));
+                if ($pTingkat === 'Sangat Rendah') {
+                    $stLabel = 'Closed (Selesai)';
+                    $stDesc = 'Level risiko turun di bawah ambang batas';
+                    $stBadgeCls = 'badge-success';
+                } else {
+                    $stLabel = 'Open';
+                    $stDesc = 'Level risiko belum di bawah ambang batas';
+                    $stBadgeCls = 'badge-warning';
+                }
+            }
+          ?>
+          <td style="text-align:center;line-height:1.3">
+            <?php if ($stLabel === '–'): ?>
+            <span style="color:var(--text-muted)">–</span>
+            <?php else: ?>
+            <span class="badge <?= $stBadgeCls ?>" style="font-size:.74rem;padding:3px 8px;font-weight:700"><?= htmlspecialchars($stLabel) ?></span>
+            <div style="font-size:.68rem;color:var(--text-muted);margin-top:3px;line-height:1.25"><?= htmlspecialchars($stDesc) ?></div>
+            <?php endif; ?>
+          </td>
           <?php if ($canInput): ?>
           <td style="text-align:center;white-space:nowrap">
             <button type="button" class="btn <?= $c ? 'btn-outline' : 'btn-primary' ?> btn-sm" onclick="openMonev(<?= $i ?>)" title="Isi / ubah monev risiko ini" style="font-size:.74rem;padding:4px 10px">
@@ -653,7 +882,7 @@ $efektifBadge = function (?string $e): string {
             <div class="monev-text-grid">
               <div class="full">
                 <label class="form-label" style="font-size:.78rem;font-weight:700">Upaya Pengendalian</label>
-                <textarea name="upaya_pengendalian" id="monevUpaya" class="form-control" rows="3" placeholder="Tuliskan upaya pengendalian yang dilakukan..." style="font-size:.82rem"></textarea>
+                <textarea name="upaya_pengendalian" id="monevUpaya" class="form-control" rows="2" placeholder="Tuliskan upaya pengendalian yang dilakukan..." style="font-size:.82rem"></textarea>
               </div>
               <div class="full">
                 <label class="form-label" style="font-size:.78rem;font-weight:700">Link Data Dukung</label>
@@ -705,13 +934,105 @@ $efektifBadge = function (?string $e): string {
 <?php endif; ?>
 
 <style>
-  .monev-data-table { width: 100%; min-width: <?= $showPrevQ ? 1390 : 1140 ?>px; table-layout: fixed; }
-  .monev-data-table th { padding: 9px 10px; line-height: 1.3; white-space: nowrap; font-size:.68rem; }
-  .monev-data-table td { padding: 10px 9px; line-height: 1.45; vertical-align: middle; overflow-wrap: anywhere; }
+  /* ── Multi-row Sticky Table Header (Sejajar Sempurna untuk Status & Aksi) ── */
+  .monev-scroll-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 65vh;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    scrollbar-width: thin;
+  }
+  .monev-data-table {
+    width: 100%;
+    min-width: <?= $showPrevQ ? 1750 : 1500 ?>px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  /* Baris 1 header sticky di top 0 */
+  .monev-scroll-wrap thead tr:first-child th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: var(--surface2);
+    height: 34px !important;
+    box-sizing: border-box !important;
+    border-top: 1px solid var(--border) !important;
+    border-bottom: 1px solid var(--border) !important;
+    border-right: 1px solid var(--border) !important;
+    vertical-align: middle !important;
+    padding: 6px 8px !important;
+    font-size: .68rem !important;
+    line-height: 1.3 !important;
+    box-shadow: none !important;
+    white-space: nowrap;
+  }
+  .monev-scroll-wrap thead tr:first-child th:first-child {
+    border-left: 1px solid var(--border) !important;
+  }
+  /* Baris 2 header sticky tepat di bawah baris 1 (top 34px) */
+  .monev-scroll-wrap thead tr:nth-child(2) th {
+    position: sticky !important;
+    top: 34px !important;
+    z-index: 9 !important;
+    background: var(--surface2);
+    height: 34px !important;
+    box-sizing: border-box !important;
+    border-bottom: 2px solid var(--border) !important;
+    border-right: 1px solid var(--border) !important;
+    vertical-align: middle !important;
+    padding: 6px 8px !important;
+    font-size: .68rem !important;
+    line-height: 1.3 !important;
+    box-shadow: none !important;
+    white-space: nowrap;
+  }
+  .monev-scroll-wrap thead tr:nth-child(2) th:first-child {
+    border-left: 1px solid var(--border) !important;
+  }
+  /* Kolom rowspan="2" (No, Kode, Risiko, Upaya Pengendalian, Status, Aksi):
+     Tinggi tepat 68px (baris 1 + baris 2), vertikal di tengah, dan border-bottom sejajar baris 2 */
+  .monev-scroll-wrap thead tr:first-child th[rowspan="2"] {
+    height: 68px !important;
+    border-bottom: 2px solid var(--border) !important;
+    vertical-align: middle !important;
+    z-index: 10 !important;
+  }
+  .monev-scroll-wrap thead th.col-status {
+    background: var(--surface2) !important;
+    font-weight: 700;
+  }
+  .monev-scroll-wrap thead th.col-action {
+    background: var(--surface2) !important;
+    font-weight: 700;
+  }
+  .dark-mode .monev-scroll-wrap thead tr:first-child th,
+  .dark-mode .monev-scroll-wrap thead tr:nth-child(2) th {
+    background: #1e293b !important;
+  }
+  .monev-data-table td {
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 10px 9px;
+    line-height: 1.45;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+  }
+  .monev-data-table td:first-child {
+    border-left: 1px solid var(--border);
+  }
   .monev-data-table tbody tr:nth-child(even) { background: rgba(241,245,249,.55); }
-  .dark-mode .monev-data-table tbody tr:nth-child(even) { background: rgba(30,41,59,.4); }
-  .monev-data-table .badge, .monev-data-table .monev-level-pill { font-size:.62rem; padding:3px 8px; }
-  /* Tombol AKSI: jangan sampai teks melipat ke bawah */
+  .monev-data-table thead th.col-risk { text-align: center !important; }
+  .monev-data-table .badge, .monev-data-table .monev-level-pill { font-size:.62rem; padding:3px 8px; box-sizing: border-box; }
+  .monev-data-table .monev-level-pill {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    margin: 0 auto !important;
+    white-space: nowrap !important;
+  }
   .monev-data-table .btn { white-space: nowrap; padding: 6px 10px; gap: 6px; }
   /* Toolbar: kotak cari & pilihan jumlah data sejajar satu baris (tidak naik-turun) */
   .monev-toolbar { flex-wrap: nowrap; }
@@ -724,11 +1045,44 @@ $efektifBadge = function (?string $e): string {
   #monev-table .monev-toolbar { flex: 0 0 auto; }
   @media (max-width: 820px) { #monev-table .card-header { flex-wrap: wrap !important; } }
   /* Geser horizontal: scrollbar selalu tampak agar kolom yang tidak muat mudah digeser */
-  .monev-scroll-wrap { overflow-x: auto; scrollbar-width: thin; }
   .monev-scroll-wrap::-webkit-scrollbar { height: 10px; width: 10px; }
   .monev-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(100,116,139,.45); border-radius: 8px; }
   .monev-scroll-wrap::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.7); }
   .monev-scroll-wrap::-webkit-scrollbar-track { background: rgba(148,163,184,.14); border-radius: 8px; }
+
+  /* ── Banner Insight Klik & Filter ─────────────────────────── */
+  .monev-insight.is-clickable {
+    cursor: pointer !important;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease !important;
+    user-select: none;
+  }
+  .monev-insight.is-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,.08) !important;
+  }
+  .monev-insight.bad.is-clickable:hover {
+    box-shadow: 0 6px 18px rgba(220,38,38,.18) !important;
+    border-color: rgba(220,38,38,.4) !important;
+  }
+  .monev-insight.warn.is-clickable:hover {
+    box-shadow: 0 6px 18px rgba(245,158,11,.18) !important;
+    border-color: rgba(245,158,11,.4) !important;
+  }
+  .monev-banner-btn {
+    font-size: .75rem !important;
+    font-weight: 700 !important;
+    padding: 6px 14px !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,.08) !important;
+    transition: all .15s ease !important;
+  }
+  .monev-insight.is-clickable:hover .monev-banner-btn {
+    transform: scale(1.03);
+  }
 
   /* ── Modal Isi Monev (dipercantik) ────────────────────────── */
   #modalMonev .modal{ border-radius:18px; box-shadow:0 26px 64px -16px rgba(2,6,23,.5); }
@@ -793,6 +1147,281 @@ $efektifBadge = function (?string $e): string {
     .compact-heatmap .heatmap td>div:nth-child(2){font-size:.56rem!important}
     .compact-heatmap .heatmap th{font-size:.75rem!important;padding:6px!important;width:auto!important;min-width:0!important;max-width:none!important}
   }
+
+  /* ── Switcher Periode Matriks Risiko 5x5: Dropdown Ringkas & Rapi ── */
+  .monev-matrix-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .monev-matrix-tabs .matrix-period-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .80rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .monev-matrix-tabs .matrix-period-label i {
+    font-size: .82rem;
+    color: var(--accent);
+  }
+  .matrix-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .matrix-period-select {
+    height: 34px !important;
+    min-width: 140px;
+    padding: 0 30px 0 12px !important;
+    font-size: .80rem !important;
+    font-weight: 700 !important;
+    color: var(--text) !important;
+    background-color: var(--surface) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04) !important;
+    transition: all .2s ease !important;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='%2364748b' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 8px center !important;
+    background-size: 16px !important;
+  }
+  .matrix-period-select:hover {
+    border-color: var(--accent) !important;
+  }
+  .matrix-period-select:focus {
+    border-color: var(--accent) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--accent-glow) !important;
+  }
+  @media(max-width:640px){
+    .monev-matrix-tabs {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .matrix-period-select {
+      flex: 1 1 auto;
+      max-width: 200px;
+    }
+  }
+  /* ── Opsi 1: Grid 2-Kolom Matriks & Distribusi Risiko ── */
+  .monev-matrix-analytics-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+    align-items: stretch;
+  }
+  @media (max-width: 1180px) {
+    .monev-matrix-analytics-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Donut Chart Container */
+  .monev-donut-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 0 2px;
+  }
+  .monev-donut-canvas-box {
+    position: relative;
+    width: 180px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .monev-donut-center-info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  .donut-center-num {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .donut-center-label {
+    font-size: .62rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-top: 2px;
+  }
+
+  /* 5 Level Stat Cards */
+  .monev-level-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    flex: 1;
+  }
+  .monev-level-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 11px;
+    border-radius: 9px;
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: all .2s cubic-bezier(.4, 0, .2, 1);
+    user-select: none;
+    position: relative;
+    outline: none;
+  }
+  .monev-level-card:hover {
+    transform: translateX(3px);
+    border-color: var(--card-color);
+    box-shadow: 0 3px 10px rgba(0,0,0,.06);
+  }
+  .monev-level-card.active {
+    border-color: var(--card-color) !important;
+    background: var(--card-tint) !important;
+    box-shadow: 0 0 0 2px var(--card-color), 0 4px 12px rgba(0,0,0,.08) !important;
+  }
+  .monev-level-card .level-info {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+  .monev-level-card .level-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.9);
+  }
+  .dark-mode .monev-level-card .level-dot {
+    box-shadow: 0 0 0 2px rgba(30,41,59,.9);
+  }
+  .monev-level-card .level-name {
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .monev-level-card .level-range {
+    font-size: .64rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 1px;
+  }
+  .monev-level-card .level-metrics {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .monev-level-card .level-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 25px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 6px;
+    font-size: .76rem;
+    font-weight: 800;
+    background: var(--card-badge-bg);
+    color: var(--card-badge-color);
+    line-height: 1;
+  }
+  .monev-level-card .level-pct {
+    font-size: .74rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 34px;
+    text-align: right;
+  }
+
+  /* Specific level themes */
+  .card-st {
+    --card-color: #dc2626;
+    --card-tint: rgba(220, 38, 38, .07);
+    --card-badge-bg: #fee2e2;
+    --card-badge-color: #991b1b;
+  }
+  .dark-mode .card-st {
+    --card-badge-bg: rgba(220, 38, 38, .22);
+    --card-badge-color: #fca5a5;
+  }
+  .card-t {
+    --card-color: #ea580c;
+    --card-tint: rgba(234, 88, 12, .07);
+    --card-badge-bg: #ffedd5;
+    --card-badge-color: #c2410c;
+  }
+  .dark-mode .card-t {
+    --card-badge-bg: rgba(234, 88, 12, .22);
+    --card-badge-color: #fdba74;
+  }
+  .card-s {
+    --card-color: #d97706;
+    --card-tint: rgba(217, 119, 6, .07);
+    --card-badge-bg: #fef3c7;
+    --card-badge-color: #b45309;
+  }
+  .dark-mode .card-s {
+    --card-badge-bg: rgba(217, 119, 6, .22);
+    --card-badge-color: #fde68a;
+  }
+  .card-r {
+    --card-color: #16a34a;
+    --card-tint: rgba(22, 163, 74, .07);
+    --card-badge-bg: #dcfce7;
+    --card-badge-color: #166534;
+  }
+  .dark-mode .card-r {
+    --card-badge-bg: rgba(22, 163, 74, .22);
+    --card-badge-color: #86efac;
+  }
+  .card-sr {
+    --card-color: #2563eb;
+    --card-tint: rgba(37, 99, 235, .07);
+    --card-badge-bg: #dbeafe;
+    --card-badge-color: #1d4ed8;
+  }
+  .dark-mode .card-sr {
+    --card-badge-bg: rgba(37, 99, 235, .22);
+    --card-badge-color: #93c5fd;
+  }
+  .monev-analytics-hint {
+    font-size: .67rem;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.4;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+  @media (max-width: 1180px) and (min-width: 641px) {
+    .monev-analytics-body-content {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+  }
 </style>
 
 <script>
@@ -800,9 +1429,133 @@ $efektifBadge = function (?string $e): string {
   // ── Data Matriks Risiko 5x5 Interaktif Triwulanan ────────────────
   const rawMatrixData = <?= json_encode($matrixData ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
   let currentMatrixPeriod = <?= json_encode($activeMatrixPeriod ?? 'tw1') ?>;
+  window.currentMatrixPeriod = currentMatrixPeriod;
+  let monevLevelChart = null;
+
+  const levelLabels = ['Sangat Tinggi', 'Tinggi', 'Sedang', 'Rendah', 'Sangat Rendah'];
+  const levelColors = ['#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb'];
+
+  function initOrUpdateDonutChart(levels, total) {
+    const canvas = document.getElementById('monevLevelDonut');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    const isDark = document.body.classList.contains('dark-mode');
+    const borderColor = isDark ? '#1e293b' : '#ffffff';
+
+    const dataValues = (total > 0)
+      ? levelLabels.map(lvl => (levels && levels[lvl]) || 0)
+      : [1];
+    const bgColors = (total > 0)
+      ? levelColors
+      : [isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'];
+
+    if (!monevLevelChart) {
+      monevLevelChart = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: (total > 0) ? levelLabels : ['Belum Ada Data'],
+          datasets: [{
+            data: dataValues,
+            backgroundColor: bgColors,
+            borderColor: borderColor,
+            borderWidth: 2,
+            hoverOffset: (total > 0) ? 6 : 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: total > 0,
+              backgroundColor: isDark ? '#1e293b' : '#ffffff',
+              titleColor: isDark ? '#ffffff' : '#0f172a',
+              bodyColor: isDark ? '#cbd5e1' : '#334155',
+              borderColor: isDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.1)',
+              borderWidth: 1,
+              padding: 9,
+              cornerRadius: 8,
+              callbacks: {
+                label: function(ctx) {
+                  const val = ctx.raw || 0;
+                  const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                  return ` ${ctx.label}: ${val} risiko (${pct}%)`;
+                }
+              }
+            }
+          },
+          onClick: (evt, activeEls) => {
+            if (activeEls.length > 0 && total > 0) {
+              const idx = activeEls[0].index;
+              const clickedLevel = levelLabels[idx];
+              if (clickedLevel) filterByRiskLevel(clickedLevel);
+            }
+          }
+        }
+      });
+    } else {
+      monevLevelChart.data.labels = (total > 0) ? levelLabels : ['Belum Ada Data'];
+      monevLevelChart.data.datasets[0].data = dataValues;
+      monevLevelChart.data.datasets[0].backgroundColor = bgColors;
+      monevLevelChart.data.datasets[0].borderColor = borderColor;
+      monevLevelChart.data.datasets[0].hoverOffset = (total > 0) ? 6 : 0;
+      monevLevelChart.options.plugins.tooltip.enabled = total > 0;
+      monevLevelChart.update('none');
+    }
+  }
+
+  function updateLevelCards(levels, total, label) {
+    const centerTotalEl = document.getElementById('donutCenterTotal');
+    if (centerTotalEl) centerTotalEl.textContent = total;
+
+    const totalBadgeEl = document.getElementById('analyticsTotalBadge');
+    if (totalBadgeEl) totalBadgeEl.textContent = `${total} Risiko Terpantau`;
+
+    const periodLabelEl = document.getElementById('analyticsPeriodLabel');
+    if (periodLabelEl) periodLabelEl.textContent = label;
+
+    const mapping = [
+      { key: 'Sangat Tinggi', countId: 'lvlCount_ST', pctId: 'lvlPct_ST' },
+      { key: 'Tinggi',        countId: 'lvlCount_T',  pctId: 'lvlPct_T' },
+      { key: 'Sedang',        countId: 'lvlCount_S',  pctId: 'lvlPct_S' },
+      { key: 'Rendah',        countId: 'lvlCount_R',  pctId: 'lvlPct_R' },
+      { key: 'Sangat Rendah', countId: 'lvlCount_SR', pctId: 'lvlPct_SR' }
+    ];
+
+    mapping.forEach(m => {
+      const cnt = (levels && levels[m.key]) || 0;
+      const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+      const cEl = document.getElementById(m.countId);
+      const pEl = document.getElementById(m.pctId);
+      if (cEl) cEl.textContent = cnt;
+      if (pEl) pEl.textContent = `${pct}%`;
+    });
+  }
+
+  window.renderMonevAnalytics = function() {
+    const pData = rawMatrixData[currentMatrixPeriod] || { counts: {}, items: {}, total: 0, label: '', levels: {} };
+    updateLevelCards(pData.levels || {}, pData.total, pData.label);
+    if (typeof Chart !== 'undefined') {
+      initOrUpdateDonutChart(pData.levels || {}, pData.total);
+    } else {
+      setTimeout(() => {
+        if (typeof Chart !== 'undefined') {
+          initOrUpdateDonutChart(pData.levels || {}, pData.total);
+        }
+      }, 250);
+    }
+  };
 
   window.switchMonevPeriod = function(period) {
     currentMatrixPeriod = period;
+    window.currentMatrixPeriod = period;
+    const sel = document.getElementById('monevPeriodSelect');
+    if (sel && sel.value !== period) {
+      sel.value = period;
+    }
     document.querySelectorAll('.matrix-period-btn').forEach(btn => {
       if (btn.dataset.period === period) {
         btn.className = 'btn btn-sm btn-primary matrix-period-btn';
@@ -811,6 +1564,12 @@ $efektifBadge = function (?string $e): string {
       }
     });
     renderMonevMatrix();
+    renderMonevAnalytics();
+
+    // Re-apply table filter if level filter is active
+    if (window.monevTableState && window.monevTableState.level && typeof window.applyMonevTable === 'function') {
+      window.applyMonevTable();
+    }
 
     // Otomatis sesuaikan judul di tabel monev berdasarkan periode matrik risiko yang dipilih
     const tableTitleEl = document.getElementById('monevTableTitle');
@@ -841,7 +1600,7 @@ $efektifBadge = function (?string $e): string {
   };
 
   window.renderMonevMatrix = function() {
-    const pData = rawMatrixData[currentMatrixPeriod] || { counts: {}, items: {}, total: 0, label: '' };
+    const pData = rawMatrixData[currentMatrixPeriod] || { counts: {}, items: {}, total: 0, label: '', levels: {} };
     const labelEl = document.getElementById('matrixPeriodLabel');
     const countEl = document.getElementById('matrixCountInfo');
     if (labelEl) labelEl.textContent = pData.label;
@@ -869,6 +1628,71 @@ $efektifBadge = function (?string $e): string {
     }
   };
 
+  window.filterByRiskLevel = function(level) {
+    const state = window.monevTableState;
+    if (!state) return;
+
+    if (state.level === level) {
+      clearLevelFilter();
+      return;
+    }
+    state.level = level;
+    state.page = 1;
+
+    // Reset general stat filter to prevent conflict
+    state.filter = 'all';
+    document.querySelectorAll('.monev-filter-card').forEach(c => c.classList.remove('active'));
+
+    document.querySelectorAll('.monev-level-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.level === level);
+    });
+
+    const resetBtn = document.getElementById('btnResetLevelFilter');
+    if (resetBtn) resetBtn.style.display = 'inline-flex';
+
+    const chip = document.getElementById('monevFilterChip');
+    const chipText = document.getElementById('monevFilterChipText');
+    if (chip && chipText) {
+      chip.style.display = '';
+      chipText.textContent = `Tingkat: ${level}`;
+    }
+
+    if (typeof window.applyMonevTable === 'function') {
+      window.applyMonevTable();
+    }
+
+    const t = document.getElementById('monev-table');
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  window.clearLevelFilter = function() {
+    const state = window.monevTableState;
+    if (!state) return;
+    state.level = '';
+    state.page = 1;
+
+    document.querySelectorAll('.monev-level-card').forEach(card => {
+      card.classList.remove('active');
+    });
+
+    const resetBtn = document.getElementById('btnResetLevelFilter');
+    if (resetBtn) resetBtn.style.display = 'none';
+
+    const chip = document.getElementById('monevFilterChip');
+    if (chip) {
+      if (state.filter === 'all') {
+        chip.style.display = 'none';
+      } else {
+        const fLabels = { terisi: 'Sudah dipantau', efektif: 'Efektif', eskalasi: 'Eskalasi', penurunan: 'Penurunan' };
+        document.getElementById('monevFilterChipText').textContent = fLabels[state.filter] || state.filter;
+      }
+    }
+
+    if (typeof window.applyMonevTable === 'function') {
+      window.applyMonevTable();
+    }
+  };
+
   window.clickMonevCell = function(p, d, skor) {
     const pData = rawMatrixData[currentMatrixPeriod];
     const items = (pData && pData.items && pData.items[p] && pData.items[p][d]) || [];
@@ -892,7 +1716,7 @@ $efektifBadge = function (?string $e): string {
     items.forEach(item => {
       let bgC = '#3b82f6', fgC = '#fff';
       if(item.tingkat === 'Sangat Tinggi') bgC = '#dc2626';
-      else if(item.tingkat === 'Tinggi') bgC = '#f97316';
+      else if(item.tingkat === 'Tinggi') bgC = '#ea580c';
       else if(item.tingkat === 'Sedang') { bgC = '#FFFF00'; fgC = '#1e293b'; }
       else if(item.tingkat === 'Rendah') bgC = '#22c55e';
 
@@ -967,8 +1791,9 @@ $efektifBadge = function (?string $e): string {
       });
     }, 150);
 
-    // ── Inisialisasi Matriks Risiko 5x5 ──────────────────────
+    // ── Inisialisasi Matriks Risiko 5x5 & Distribusi Tingkat ────
     renderMonevMatrix();
+    renderMonevAnalytics();
   }
 
   if (document.readyState === 'loading') {
@@ -981,16 +1806,37 @@ $efektifBadge = function (?string $e): string {
 
 <script>
 // ── Filter + pagination tabel ────────────────────────────────
-const monevTableState = { q: '', unit: '', filter: 'all', page: 1, size: 10 };
-const filterLabels = { terisi: 'Sudah dipantau', efektif: 'Efektif', eskalasi: 'Eskalasi', penurunan: 'Penurunan' };
+window.monevTableState = { q: '', unit: '', filter: 'all', level: '', page: 1, size: 10 };
+const monevTableState = window.monevTableState;
+const filterLabels = { terisi: 'Sudah dipantau', belum: 'Belum dipantau', efektif: 'Efektif', eskalasi: 'Eskalasi', penurunan: 'Penurunan' };
 
 function applyMonevTable() {
   const allRows = [...document.querySelectorAll('#tableMonevTahunan tbody tr.monev-row')];
+  const activePeriod = window.currentMatrixPeriod || 'tw1';
+
   const visible = allRows.filter(tr => {
     if (monevTableState.q && !tr.dataset.search.includes(monevTableState.q)) return false;
     if (monevTableState.unit && tr.dataset.unit !== monevTableState.unit) return false;
+    if (monevTableState.level) {
+      let rowLevel = '';
+      if (activePeriod === 'awal') {
+        rowLevel = tr.dataset.levelAwal || '';
+      } else if (activePeriod === 'tw1') {
+        rowLevel = tr.dataset.levelTw1 || '';
+      } else if (activePeriod === 'tw2') {
+        rowLevel = tr.dataset.levelTw2 || '';
+      } else if (activePeriod === 'tw3') {
+        rowLevel = tr.dataset.levelTw3 || '';
+      } else if (activePeriod === 'tw4') {
+        rowLevel = tr.dataset.levelTw4 || '';
+      } else {
+        rowLevel = tr.dataset.levelCurr || '';
+      }
+      if (rowLevel !== monevTableState.level) return false;
+    }
     switch (monevTableState.filter) {
       case 'terisi': return tr.dataset.terisi === '1';
+      case 'belum': return tr.dataset.terisi === '0';
       case 'efektif': return tr.dataset.efektif === '1';
       case 'eskalasi': return tr.dataset.naik === '1';
       case 'penurunan': return tr.dataset.turun === '1';
@@ -1028,11 +1874,16 @@ function applyMonevTable() {
   const winEnd = Math.min(pages, winStart + 4);
   for (let p = winStart; p <= winEnd; p++) mkBtn(String(p), p, false, p === monevTableState.page);
   mkBtn('<i class="fas fa-chevron-right"></i>', monevTableState.page + 1, monevTableState.page >= pages, false, 'Halaman Berikutnya');
-  mkBtn('<i class="fas fa-angles-right"></i>', pages, monevTableState.page >= pages, false, 'Halaman Terakhir');
 }
+window.applyMonevTable = applyMonevTable;
 
 function setMonevFilter(f) {
   monevTableState.filter = f;
+  monevTableState.level = '';
+  document.querySelectorAll('.monev-level-card').forEach(c => c.classList.remove('active'));
+  const resetBtn = document.getElementById('btnResetLevelFilter');
+  if (resetBtn) resetBtn.style.display = 'none';
+
   monevTableState.page = 1;
   document.querySelectorAll('.monev-filter-card').forEach(c => {
     c.classList.toggle('active', c.dataset.filter === f);
@@ -1046,7 +1897,28 @@ function setMonevFilter(f) {
   }
   applyMonevTable();
 }
-function clearMonevFilter() { setMonevFilter('all'); }
+window.setMonevFilter = setMonevFilter;
+
+window.triggerBannerFilter = function(filterType) {
+  if (typeof setMonevFilter === 'function') {
+    setMonevFilter(filterType);
+  }
+  const t = document.getElementById('monev-table');
+  if (t) {
+    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+function clearMonevFilter() {
+  monevTableState.filter = 'all';
+  if (typeof clearLevelFilter === 'function') {
+    clearLevelFilter();
+  } else {
+    monevTableState.level = '';
+    applyMonevTable();
+  }
+  document.querySelectorAll('.monev-filter-card').forEach(c => c.classList.remove('active'));
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const scrollToMonevTable = () => {

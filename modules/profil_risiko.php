@@ -1246,7 +1246,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1;justify-content:flex-end">
         <div class="search-bar" style="max-width:250px;width:100%">
           <i class="fas fa-search"></i>
-          <input type="text" class="form-control" id="searchDetailRisiko" placeholder="Cari detail risiko..." onkeyup="filterTableDetailRisiko()" style="height:38px">
+          <input type="text" class="form-control" id="searchDetailRisiko" value="<?= xss($_GET['q'] ?? '') ?>" placeholder="Cari detail risiko..." onkeyup="filterTableDetailRisiko()" style="height:38px">
         </div>
         <?php if(hasRole('Admin','Risk Manager')): ?>
         <?php if($risikoCount > 0): ?>

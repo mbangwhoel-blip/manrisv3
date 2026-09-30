@@ -508,7 +508,7 @@ if ($detailId > 0) {
     // Ambil data penilaian (P/D/bobot/nilai/tingkat) dari profil_risiko_detail
     // jika risiko ini sudah dinilai di Profil Risiko.
     if ($detailRow) {
-        $pd = $db->prepare("SELECT probabilitas, dampak, bobot, nilai, tingkat_risiko, rencana_penanganan, jadwal_pelaksanaan, penanggungjawab FROM profil_risiko_detail WHERE kode_risiko=? ORDER BY id DESC LIMIT 1");
+        $pd = $db->prepare("SELECT id_profil, probabilitas, dampak, bobot, nilai, tingkat_risiko, rencana_penanganan, jadwal_pelaksanaan, penanggungjawab FROM profil_risiko_detail WHERE kode_risiko=? ORDER BY id DESC LIMIT 1");
         $pd->bind_param('s', $detailRow['kode_risiko']);
         $pd->execute();
         $penilaian = $pd->get_result()->fetch_assoc();
@@ -790,6 +790,9 @@ $draftMaster = (int)$heroStats['draft'];
       </div>
     </div>
     <div class="modal-footer">
+      <?php if (!empty($penilaian['id_profil'])): ?>
+      <a href="<?= APP_URL ?>/?page=profil_risiko&id=<?= (int)$penilaian['id_profil'] ?>&q=<?= urlencode($detailRow['kode_risiko']) ?>" class="btn btn-outline" style="font-size:.82rem" title="Buka Dokumen Profil Risiko Unit Asalnya"><i class="fas fa-file-signature"></i> Profil Risiko Unit</a>
+      <?php endif; ?>
       <a href="<?= APP_URL ?>/?page=mitigasi&risiko_id=<?= $detailRow['id'] ?>" class="btn btn-success"><i class="fas fa-tasks"></i> Kelola Mitigasi</a>
       <button onclick="closeModal('modalDetail')" class="btn btn-outline">Tutup</button>
     </div>

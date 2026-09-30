@@ -14,6 +14,10 @@ $jenisLaporan = $_GET['jenis'] ?? 'tw1';
 $type = $_GET['type'] ?? 'excel';
 
 $db = getDB();
+$chkReal = $db->query("SHOW COLUMNS FROM monev_triwulan LIKE 'realisasi_pengendalian'");
+if ($chkReal && $chkReal->num_rows === 0) {
+    $db->query("ALTER TABLE monev_triwulan ADD COLUMN realisasi_pengendalian TEXT NULL AFTER upaya_pengendalian");
+}
 $reportUser = strtolower(trim((string)($_SESSION['user_username'] ?? '')));
 $subjudulMap = ['adum' => 'Administrasi Umum', 'risk_manager' => 'Risk Manager', 'timker1' => 'Timker1', 'timker2' => 'Timker2', 'timker3' => 'Timker3'];
 $subjudul = $subjudulMap[$reportUser] ?? trim((string)($_SESSION['user_nama'] ?? ''));
@@ -34,20 +38,21 @@ $baseRisks = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 
 $twTarget = 1; if ($jenisLaporan == 'tw2') $twTarget = 2; if ($jenisLaporan == 'tw3') $twTarget = 3; if ($jenisLaporan == 'tw4' || $jenisLaporan == 'tahunan') $twTarget = 4;
 
-$m_s = $db->prepare("SELECT m.* FROM monev_triwulan m JOIN kkpr_risiko r ON r.id = m.id_risiko JOIN kkpr_header h ON h.id = r.id_kkpr WHERE m.triwulan=? AND h.tahun=?");
-$m_s->bind_param('is', $twTarget, $activeTahun); $m_s->execute();
-$monevCurrRaw = $m_s->get_result()->fetch_all(MYSQLI_ASSOC); $m_s->close();
-$monevCurr = []; foreach ($monevCurrRaw as $m) $monevCurr[$m['id_risiko']] = $m;
+// Ambil semua data monev_triwulan untuk tahun aktif (TW1 s/d TW4)
+$m_all = $db->prepare("SELECT m.* FROM monev_triwulan m JOIN kkpr_risiko r ON r.id = m.id_risiko JOIN kkpr_header h ON h.id = r.id_kkpr WHERE h.tahun=? ORDER BY m.triwulan ASC");
+$m_all->bind_param('s', $activeTahun);
+$m_all->execute();
+$monevAllRaw = $m_all->get_result()->fetch_all(MYSQLI_ASSOC);
+$m_all->close();
 
-// Ambil data triwulan sebelumnya untuk perbandingan tiap triwulan (TW2 vs TW1, TW3 vs TW2, TW4 vs TW3)
-$monevPrev = [];
-if ($twTarget > 1 && $jenisLaporan !== 'tahunan') {
-    $twPrev = $twTarget - 1;
-    $m_p = $db->prepare("SELECT m.* FROM monev_triwulan m JOIN kkpr_risiko r ON r.id = m.id_risiko JOIN kkpr_header h ON h.id = r.id_kkpr WHERE m.triwulan=? AND h.tahun=?");
-    $m_p->bind_param('is', $twPrev, $activeTahun); $m_p->execute();
-    $monevPrevRaw = $m_p->get_result()->fetch_all(MYSQLI_ASSOC); $m_p->close();
-    foreach ($monevPrevRaw as $m) $monevPrev[$m['id_risiko']] = $m;
+$monevByTwRisk = [];
+foreach ($monevAllRaw as $m) {
+    $monevByTwRisk[(int)$m['triwulan']][(int)$m['id_risiko']] = $m;
 }
+
+$monevCurr = $monevByTwRisk[$twTarget] ?? [];
+$twPrev = ($twTarget > 1) ? ($twTarget - 1) : 1;
+$monevPrev = $monevByTwRisk[$twPrev] ?? [];
 
 $rows = [];
 foreach ($baseRisks as $r) {
@@ -57,12 +62,19 @@ foreach ($baseRisks as $r) {
 
     if ($twTarget > 1 && $jenisLaporan !== 'tahunan') {
         // Kondisi awal mengambil hasil triwulan sebelumnya (misal TW1 untuk TW2)
-        // Fallback ke baseline awal KKPR bila triwulan sebelumnya belum ada data
-        $pA = ($prev && $prev['pantau_p'] !== null) ? $prev['pantau_p'] : $r['probabilitas'];
-        $dA = ($prev && $prev['pantau_d'] !== null) ? $prev['pantau_d'] : $r['dampak_level'];
-        $bA = ($prev && $prev['pantau_bobot'] !== null) ? $prev['pantau_bobot'] : $r['bobot'];
-        $nA = ($prev && $prev['pantau_nilai'] !== null) ? $prev['pantau_nilai'] : $r['nilai_risiko'];
-        $tA = ($prev && !empty($prev['pantau_tingkat'])) ? $prev['pantau_tingkat'] : $r['tingkat_risiko'];
+        // Fallback ke triwulan yang lebih awal jika ada, atau baseline awal KKPR
+        $prevFilled = null;
+        for ($pt = $twTarget - 1; $pt >= 1; $pt--) {
+            if (!empty($monevByTwRisk[$pt][$idr]) && $monevByTwRisk[$pt][$idr]['pantau_p'] !== null) {
+                $prevFilled = $monevByTwRisk[$pt][$idr];
+                break;
+            }
+        }
+        $pA = ($prevFilled && $prevFilled['pantau_p'] !== null) ? $prevFilled['pantau_p'] : $r['probabilitas'];
+        $dA = ($prevFilled && $prevFilled['pantau_d'] !== null) ? $prevFilled['pantau_d'] : $r['dampak_level'];
+        $bA = ($prevFilled && $prevFilled['pantau_bobot'] !== null) ? $prevFilled['pantau_bobot'] : $r['bobot'];
+        $nA = ($prevFilled && $prevFilled['pantau_nilai'] !== null) ? $prevFilled['pantau_nilai'] : $r['nilai_risiko'];
+        $tA = ($prevFilled && !empty($prevFilled['pantau_tingkat'])) ? $prevFilled['pantau_tingkat'] : $r['tingkat_risiko'];
         $prioA = $r['prioritas_risiko'] ?? '-';
     } else {
         // Untuk Triwulan 1 dan Tahunan: Kondisi awal adalah Penilaian Awal (Baseline KKPR)
@@ -81,6 +93,33 @@ foreach ($baseRisks as $r) {
     $r['prev_tingkat'] = $tA;
     $r['prev_prio'] = $prioA;
     $r['curr'] = $curr;
+
+    // Upaya Pengendalian:
+    // 1. Ambil dari triwulan yang sedang dipilih/aktif jika sudah diisi.
+    // 2. Jika belum diisi di triwulan ini, otomatis telusuri ke triwulan sebelumnya (TW n-1 .. TW 1),
+    //    sehingga jika sudah diinput di TW 1, otomatis muncul di TW 2, TW 3, TW 4, maupun Tahunan.
+    // 3. Jika belum pernah diinput di triwulan manapun, fallback ke uraian pengendalian KKPR.
+    $upayaDisplay = '';
+    if ($curr && !empty(trim((string)($curr['upaya_pengendalian'] ?? '')))) {
+        $upayaDisplay = trim((string)$curr['upaya_pengendalian']);
+    } else {
+        $searchTw = ($jenisLaporan === 'tahunan') ? 4 : $twTarget;
+        for ($t = $searchTw; $t >= 1; $t--) {
+            $prevUpaya = $monevByTwRisk[$t][$idr]['upaya_pengendalian'] ?? null;
+            if ($prevUpaya !== null && trim((string)$prevUpaya) !== '') {
+                $upayaDisplay = trim((string)$prevUpaya);
+                break;
+            }
+        }
+        if ($upayaDisplay === '') {
+            if (!empty($r['pengendalian_uraian']) && trim((string)$r['pengendalian_uraian']) !== '') {
+                $upayaDisplay = trim((string)$r['pengendalian_uraian']);
+            } elseif (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '') {
+                $upayaDisplay = trim((string)$r['rpti_uraian']);
+            }
+        }
+    }
+    $r['upaya_display'] = $upayaDisplay !== '' ? $upayaDisplay : '-';
 
     // Evaluasi simpulan & efektivitas perbandingan triwulan aktif vs kondisi awal yang ditampilkan
     if ($curr && $curr['pantau_nilai'] !== null) {
@@ -138,15 +177,16 @@ if (!function_exists('tCl')) {
 ?>
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title><?= $judul ?></title>
 <style>
-    body { font-family: Arial, sans-serif; font-size: 9px; margin: 0; } table { width: 100%; min-width: 1100px; table-layout: fixed; border-collapse: collapse; } th, td { border: 1px solid #000; padding: 4px 5px; vertical-align: top; line-height: 1.25; overflow-wrap:anywhere; word-break:normal; } th { background-color: #e5e7eb; text-align: center; vertical-align: middle; font-weight: bold; line-height: 1.2; } .text-center { text-align: center; } .title { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 3px; } .subtitle { text-align: center; font-size: 11px; font-weight: normal; margin-bottom: 9px; } .column-number-row th { background:#d1d5db; font-size:8px; padding:2px; height:16px; }
+    body { font-family: Arial, sans-serif; font-size: 9px; margin: 0; } table { width: 100%; min-width: 1200px; table-layout: fixed; border-collapse: collapse; } th, td { border: 1px solid #000; padding: 4px 5px; vertical-align: top; line-height: 1.25; overflow-wrap:anywhere; word-break:normal; } th { background-color: #e5e7eb; text-align: center; vertical-align: middle; font-weight: bold; line-height: 1.2; } .text-center { text-align: center; } .title { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 3px; } .subtitle { text-align: center; font-size: 11px; font-weight: normal; margin-bottom: 9px; } .column-number-row th { background:#d1d5db; font-size:8px; padding:2px; height:16px; }
     .export-table td:nth-child(1),.export-table td:nth-child(4),.export-table td:nth-child(5),.export-table td:nth-child(6),.export-table td:nth-child(7),.export-table td:nth-child(8),.export-table td:nth-child(10),.export-table td:nth-child(12),.export-table td:nth-child(13),.export-table td:nth-child(14),.export-table td:nth-child(15) { white-space:nowrap; text-align:center; }
     /* Kolom TINGKAT: bila tidak muat, teks turun ke baris berikutnya (tidak terpotong) */
     .export-table td:nth-child(9),.export-table td:nth-child(16) { text-align:center; white-space:normal; word-break:normal; }
     .export-table td:nth-child(17),.export-table td:nth-child(18) { white-space:normal; min-width:68px; }
+    .export-table td:nth-child(21) { text-align:center; white-space:normal; }
     /* Header sub-kolom (P/D/BOBOT/NILAI/TINGKAT/PRIORITAS/EFEKTIFITAS) tidak boleh melipat */
     .export-table thead tr:nth-child(2) th { white-space: nowrap; font-size: 8px; }
-    /* Lebar kolom proporsional 21 kolom (total 100%) */
-    .export-table col:nth-child(1){width:2.2%}.export-table col:nth-child(2){width:7.5%}.export-table col:nth-child(3){width:11%}.export-table col:nth-child(4){width:3.8%}.export-table col:nth-child(5),.export-table col:nth-child(6){width:2.2%}.export-table col:nth-child(7){width:3.6%}.export-table col:nth-child(8){width:3.2%}.export-table col:nth-child(9){width:5%}.export-table col:nth-child(10){width:5.5%}.export-table col:nth-child(11){width:8%}.export-table col:nth-child(12),.export-table col:nth-child(13){width:2.2%}.export-table col:nth-child(14){width:3.6%}.export-table col:nth-child(15){width:3.2%}.export-table col:nth-child(16){width:5%}.export-table col:nth-child(17){width:6%}.export-table col:nth-child(18){width:6.6%}.export-table col:nth-child(19){width:6.8%}.export-table col:nth-child(20){width:6.8%}.export-table col:nth-child(21){width:5.6%}
+    /* Lebar kolom proporsional 22 kolom (total 100%) */
+    .export-table col:nth-child(1){width:2.2%}.export-table col:nth-child(2){width:7%}.export-table col:nth-child(3){width:10.5%}.export-table col:nth-child(4){width:3.5%}.export-table col:nth-child(5),.export-table col:nth-child(6){width:2%}.export-table col:nth-child(7){width:3.2%}.export-table col:nth-child(8){width:3%}.export-table col:nth-child(9){width:4.5%}.export-table col:nth-child(10){width:4.5%}.export-table col:nth-child(11){width:9%}.export-table col:nth-child(12),.export-table col:nth-child(13){width:2%}.export-table col:nth-child(14){width:3.2%}.export-table col:nth-child(15){width:3%}.export-table col:nth-child(16){width:4.5%}.export-table col:nth-child(17){width:5.5%}.export-table col:nth-child(18){width:5%}.export-table col:nth-child(19){width:6%}.export-table col:nth-child(20){width:6%}.export-table col:nth-child(21){width:7.4%}.export-table col:nth-child(22){width:5%}
     @media print { @page { size: A3 landscape; margin: 8mm; } body { margin: 0; font-size: 8px; } th, td { padding: 3px 4px; } .title { font-size: 12px; } .subtitle { font-size: 9px; margin-bottom: 6px; } .column-number-row th { font-size:7px; } }
     .print-bar{display:flex;gap:10px;align-items:center;padding:8px 14px;background:#eff6ff;border:1px dashed #93c5fd;border-radius:6px;margin:6px;font-size:12px}
     .btn-print{padding:7px 16px;background:#1e3a5f;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700}
@@ -176,7 +216,7 @@ if (!function_exists('tCl')) {
     </div>
     <table class="export-table">
         <colgroup>
-            <?php foreach (range(1, 21) as $columnNo): ?><col><?php endforeach; ?>
+            <?php foreach (range(1, 22) as $columnNo): ?><col><?php endforeach; ?>
         </colgroup>
         <thead>
             <tr>
@@ -184,7 +224,9 @@ if (!function_exists('tCl')) {
                 <th colspan="6"><?= $headerKondisiAwal ?></th>
                 <th rowspan="2">UPAYA PENGENDALIAN</th>
                 <th colspan="5"><?= $headerKondisiAkhir ?></th>
-                <th colspan="2">SIMPULAN</th><th rowspan="2">KENDALA / MASALAH</th><th rowspan="2">RENCANA TINDAK LANJUT</th><th rowspan="2">LINK DATA DUKUNG TRIWULAN <?= $twTarget ?></th>
+                <th colspan="2">SIMPULAN</th><th rowspan="2">KENDALA / MASALAH</th><th rowspan="2">RENCANA TINDAK LANJUT</th>
+                <th rowspan="2">STATUS</th>
+                <th rowspan="2">LINK DATA DUKUNG TRIWULAN <?= $twTarget ?></th>
             </tr>
             <tr>
                 <th>P</th><th>D</th><th>BOBOT</th><th>NILAI</th><th>TINGKAT</th><th>PRIORITAS</th>
@@ -192,21 +234,46 @@ if (!function_exists('tCl')) {
                 <th>TINGKAT</th><th>EFEKTIFITAS</th>
             </tr>
             <tr class="column-number-row">
-                <?php foreach (range(1, 21) as $columnNo): ?><th><?= $columnNo ?></th><?php endforeach; ?>
+                <?php foreach (range(1, 22) as $columnNo): ?><th><?= $columnNo ?></th><?php endforeach; ?>
             </tr>
         </thead>
         <tbody>
-            <?php foreach($rows as $i => $r): $c = $r['curr']; ?>
+            <?php foreach($rows as $i => $r): $c = $r['curr'];
+                $statusLabel = '-';
+                $statusDesc = '';
+                $statusBg = '';
+                $statusColor = '';
+                if ($c && $c['pantau_nilai'] !== null) {
+                    $pTingkat = trim((string)($c['pantau_tingkat'] ?? ''));
+                    if ($pTingkat === 'Sangat Rendah') {
+                        $statusLabel = 'Closed (Selesai)';
+                        $statusDesc = 'Level risiko turun di bawah ambang batas';
+                        $statusBg = '#dcfce7';
+                        $statusColor = '#166534';
+                    } else {
+                        $statusLabel = 'Open';
+                        $statusDesc = 'Level risiko belum di bawah ambang batas';
+                        $statusBg = '#fef3c7';
+                        $statusColor = '#92400e';
+                    }
+                }
+            ?>
             <tr>
                 <td class="text-center"><?= $i + 1 ?></td><td><?= htmlspecialchars($r['unit_pemilik_risiko']) ?></td><td><?= nl2br(htmlspecialchars($r['nama_risiko'])) ?></td><td class="text-center"><?= htmlspecialchars($r['kode_risiko']??'-') ?></td>
                 <td class="text-center"><?= $r['prev_p'] ?></td><td class="text-center"><?= $r['prev_d'] ?></td><td class="text-center"><?= $r['prev_bobot'] ?></td><td class="text-center"><?= round((float)$r['prev_nilai']) ?></td>
                 <td class="text-center" style="background:<?=tBg($r['prev_tingkat'])?>;color:<?=tCl($r['prev_tingkat'])?>"><?= $r['prev_tingkat'] ?></td><td class="text-center"><?= $r['prev_prio'] ?></td>
-                <td><?= $c ? nl2br(htmlspecialchars($c['upaya_pengendalian'])) : '-' ?></td>
+                <td><?= $r['upaya_display'] !== '-' ? nl2br(htmlspecialchars($r['upaya_display'])) : '-' ?></td>
                 <td class="text-center"><?= $c ? $c['pantau_p'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_d'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_bobot'] : '-' ?></td><td class="text-center"><?= $c ? $c['pantau_nilai'] : '-' ?></td>
                 <td class="text-center" style="<?= $c ? 'background:'.tBg($c['pantau_tingkat']).';color:'.tCl($c['pantau_tingkat']) : '' ?>"><?= $c ? $c['pantau_tingkat'] : '-' ?></td>
                 <td class="text-center"><?= htmlspecialchars($r['eval_simpulan']) ?></td>
                 <td class="text-center" style="<?= $r['eval_efektifitas']=='Efektif'?'background:#22c55e;color:#fff':($r['eval_efektifitas']=='Tidak Efektif'?'background:#dc2626;color:#fff':'') ?>"><?= htmlspecialchars($r['eval_efektifitas']) ?></td>
                 <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td><td><?= $c ? nl2br(htmlspecialchars($c['rencana_tindak_lanjut'])) : '-' ?></td>
+                <td class="text-center" style="<?= $statusBg ? "background:{$statusBg};color:{$statusColor};" : '' ?>">
+                    <div style="font-weight:bold;font-size:8.5px;"><?= htmlspecialchars($statusLabel) ?></div>
+                    <?php if ($statusDesc !== ''): ?>
+                    <div style="font-size:7px;line-height:1.2;margin-top:2px;opacity:.9;"><?= htmlspecialchars($statusDesc) ?></div>
+                    <?php endif; ?>
+                </td>
                 <td><?= $c && !empty($c['link_data_dukung']) ? htmlspecialchars($c['link_data_dukung']) : '-' ?></td>
             </tr>
             <?php endforeach; ?>

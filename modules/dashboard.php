@@ -105,8 +105,10 @@ $priorityTotalRows = 0; $priorityTotalPages = 1; $priorityOffset = 0;
 $topPrioritas = [];
 $heatMap = [];
 $dashboardFilters = []; $priorityPageQuery = '';
-$triwulan = ['Q1' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q2' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q3' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q4' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0]];
-$trenLabels = []; $trenAvg = []; $trenJml = []; $trenTinggi = []; $trenTotalRisk = 0; $trenTotalHigh = 0;
+$triwulan = ['Q1' => ['jml' => 0, 'avg' => null, 'tinggi' => 0], 'Q2' => ['jml' => 0, 'avg' => null, 'tinggi' => 0], 'Q3' => ['jml' => 0, 'avg' => null, 'tinggi' => 0], 'Q4' => ['jml' => 0, 'avg' => null, 'tinggi' => 0]];
+$trenLabels = ['Q1', 'Q2', 'Q3', 'Q4']; $trenAvg = [null, null, null, null]; $trenJml = [0, 0, 0, 0]; $trenTinggi = [0, 0, 0, 0]; $trenTotalRisk = 0; $trenTotalHigh = 0;
+$latestMonitoredAvg = null;
+$dashMatrixData = [];
 $dashName = trim($_SESSION['user_nama'] ?? 'Pengguna');
 $dashFirstName = explode(' ', $dashName)[0] ?: 'Pengguna';
 $highRiskPct = 0;
@@ -157,55 +159,225 @@ $priorityTotalPages = max(1, (int)ceil($priorityTotalRows / $priorityPerPage));
 if ($priorityPage > $priorityTotalPages) $priorityPage = $priorityTotalPages;
 $priorityOffset = ($priorityPage - 1) * $priorityPerPage;
 $topPrioritas = dashQuery($db, "
-  SELECT d.nama_risiko, d.nilai AS skor_risiko, d.tingkat_risiko AS level_risiko,
-         d.rencana_penanganan, d.penanggungjawab, d.jadwal_pelaksanaan
+  SELECT d.id AS id_detail, d.id_profil, d.id_risiko, d.kode_risiko, d.nama_risiko, d.nilai AS skor_risiko, d.tingkat_risiko AS level_risiko,
+         d.rencana_penanganan, d.penanggungjawab, d.jadwal_pelaksanaan,
+         p.tahun, p.unit_pemilik_risiko
   FROM profil_risiko_detail d
   JOIN profil_risiko p ON d.id_profil = p.id
   WHERE $whereStr
   ORDER BY d.nilai DESC LIMIT ? OFFSET ?
 ", $types . 'ii', array_merge($params, [$priorityPerPage, $priorityOffset]));
 
-// -- Heatmap Data --
-$heatRaw = dashQuery($db, "
-  SELECT d.probabilitas, d.dampak AS dampak_level, COUNT(*) AS cnt
-  FROM profil_risiko_detail d
-  JOIN profil_risiko p ON d.id_profil = p.id
-  WHERE $whereStr
-  GROUP BY d.probabilitas, d.dampak
+// -- Matriks Risiko 5x5 per Periode (Kondisi Awal & Triwulan 1–4) --
+$dashPeriods = ['awal' => 'Kondisi Awal', 'tw1' => 'Triwulan 1', 'tw2' => 'Triwulan 2', 'tw3' => 'Triwulan 3', 'tw4' => 'Triwulan 4'];
+$dashMatrixData = [];
+foreach ($dashPeriods as $k => $lbl) {
+    $dashMatrixData[$k] = [
+        'label' => $lbl,
+        'total' => 0,
+        'counts' => array_fill(1, 5, array_fill(1, 5, 0)),
+        'items' => array_fill(1, 5, array_fill(1, 5, []))
+    ];
+}
+
+// 1. Data Matriks Kondisi Awal (dari profil_risiko_detail)
+$baseRows = dashQuery($db, "
+    SELECT d.id, d.id_risiko, d.id_profil, d.kode_risiko, d.nama_risiko, d.unit_kerja, d.probabilitas, d.dampak, d.nilai, d.tingkat_risiko
+    FROM profil_risiko_detail d
+    JOIN profil_risiko p ON d.id_profil = p.id
+    WHERE $whereStr
+    ORDER BY d.nilai DESC
 ", $types, $params);
+
 $heatMap = [];
-foreach ($heatRaw as $h) {
-    $heatMap[$h['probabilitas']][$h['dampak_level']] = $h['cnt'];
+foreach ($baseRows as $r) {
+    $p = max(1, min(5, (int)($r['probabilitas'] ?? 1)));
+    $d = max(1, min(5, (int)($r['dampak'] ?? 1)));
+    $skor = (int)round((float)($r['nilai'] ?? ($p * $d * getBobot($p, $d))));
+    $level = trim((string)($r['tingkat_risiko'] ?: getLevelRisiko($skor)));
+    $dashMatrixData['awal']['counts'][$p][$d]++;
+    $dashMatrixData['awal']['items'][$p][$d][] = [
+        'id' => (!empty($r['id_risiko']) && (int)$r['id_risiko'] > 0) ? (int)$r['id_risiko'] : (int)$r['id'],
+        'kode' => $r['kode_risiko'] ?: '-',
+        'nama' => $r['nama_risiko'] ?: '-',
+        'unit' => $r['unit_kerja'] ?: '-',
+        'p' => $p,
+        'd' => $d,
+        'nilai' => $skor,
+        'tingkat' => $level,
+        'status' => 'Baseline'
+    ];
+    $dashMatrixData['awal']['total']++;
+    $heatMap[$p][$d] = ($heatMap[$p][$d] ?? 0) + 1;
 }
 
 $dashboardFilters = array_filter(['page'=>'dashboard','q'=>$search,'level'=>$fLevel,'tahun'=>$fTahun,'unit'=>$fUnit,'priority_limit'=>$_GET['priority_limit']??''], static fn($value) => $value !== '');
 $priorityPageQuery = http_build_query($dashboardFilters);
 
-// -- Tren Triwulanan (skor rata-rata) --
-$triwulanRaw = dashQuery($db, "
-  SELECT
-    QUARTER(p.tgl_penilaian) AS q,
-    COUNT(d.id) AS jml,
-    AVG(d.nilai) AS avg_skor,
-    SUM(d.tingkat_risiko IN ('Tinggi','Sangat Tinggi')) AS jml_tinggi
-  FROM profil_risiko_detail d
-  JOIN profil_risiko p ON d.id_profil = p.id
-  WHERE $whereStr AND p.tgl_penilaian IS NOT NULL
-  GROUP BY QUARTER(p.tgl_penilaian)
-", $types, $params);
-$triwulan = ['Q1' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q2' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q3' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0], 'Q4' => ['jml' => 0, 'avg' => 0, 'tinggi' => 0]];
-foreach ($triwulanRaw as $t) {
-    if ($t['q']) {
+// 2. Data Monev Triwulan (untuk Tren Triwulanan dan Matriks TW1..TW4)
+$whereMonev = ["m.pantau_nilai IS NOT NULL"];
+$paramsMonev = [];
+$typesMonev = '';
+
+if ($fTahun) {
+    $whereMonev[] = "h.tahun = ?";
+    $paramsMonev[] = $fTahun;
+    $typesMonev .= 's';
+}
+if ($fUnit) {
+    $whereMonev[] = "h.unit_pemilik_risiko = ?";
+    $paramsMonev[] = $fUnit;
+    $typesMonev .= 's';
+}
+if ($search) {
+    $whereMonev[] = "(r.nama_risiko LIKE ? OR r.kode_risiko LIKE ?)";
+    $s = "%$search%";
+    $paramsMonev[] = $s; $paramsMonev[] = $s;
+    $typesMonev .= 'ss';
+}
+if (!hasRole('Admin', 'Pimpinan')) {
+    $whereMonev[] = "h.created_by = ?";
+    $paramsMonev[] = (int)$_SESSION['user_id'];
+    $typesMonev .= 'i';
+}
+$whereMonevStr = implode(' AND ', $whereMonev);
+
+// Tren Triwulanan Query (berdasarkan data monev riil)
+$trenRaw = dashQuery($db, "
+    SELECT
+        m.triwulan AS q,
+        COUNT(m.id) AS jml,
+        AVG(m.pantau_nilai) AS avg_skor,
+        SUM(IF(m.pantau_tingkat IN ('Tinggi','Sangat Tinggi') OR m.pantau_nilai >= 15, 1, 0)) AS jml_tinggi
+    FROM monev_triwulan m
+    JOIN kkpr_risiko r ON r.id = m.id_risiko
+    JOIN kkpr_header h ON h.id = r.id_kkpr
+    WHERE $whereMonevStr
+    GROUP BY m.triwulan
+    ORDER BY m.triwulan
+", $typesMonev, $paramsMonev);
+
+$triwulan = [
+    'Q1' => ['jml' => 0, 'avg' => null, 'tinggi' => 0],
+    'Q2' => ['jml' => 0, 'avg' => null, 'tinggi' => 0],
+    'Q3' => ['jml' => 0, 'avg' => null, 'tinggi' => 0],
+    'Q4' => ['jml' => 0, 'avg' => null, 'tinggi' => 0]
+];
+$latestMonitored = null;
+foreach ($trenRaw as $t) {
+    if (!empty($t['q'])) {
         $key = 'Q' . $t['q'];
         if (isset($triwulan[$key])) {
-            $triwulan[$key] = ['jml' => (int)$t['jml'], 'avg' => round((float)$t['avg_skor'], 1), 'tinggi' => (int)$t['jml_tinggi']];
+            $triwulan[$key] = [
+                'jml' => (int)$t['jml'],
+                'avg' => round((float)$t['avg_skor'], 1),
+                'tinggi' => (int)$t['jml_tinggi']
+            ];
+            $latestMonitored = $triwulan[$key];
+            $latestTwNum = (int)$t['q'];
         }
     }
 }
-$trenLabels=[];$trenAvg=[];$trenJml=[];$trenTinggi=[];
-foreach(['Q1','Q2','Q3','Q4'] as $q){$trenLabels[]=$q;$trenAvg[]=(float)$triwulan[$q]['avg'];$trenJml[]=(int)$triwulan[$q]['jml'];$trenTinggi[]=(int)$triwulan[$q]['tinggi'];}
-$trenTotalRisk = array_sum($trenJml);
-$trenTotalHigh = array_sum($trenTinggi);
+
+$baseAvgRow = dashQuery($db, "
+    SELECT AVG(d.nilai) as avg_score, SUM(d.nilai >= 15) as jml_tinggi
+    FROM profil_risiko_detail d
+    JOIN profil_risiko p ON d.id_profil = p.id
+    WHERE $whereStr
+", $types, $params);
+$baseAvgScore = round((float)($baseAvgRow[0]['avg_score'] ?? 0), 1);
+$baseHighCount = (int)($baseAvgRow[0]['jml_tinggi'] ?? 0);
+
+$trenLabelsOpt3 = ['Kondisi Awal', 'Triwulan 1', 'Triwulan 2', 'Triwulan 3', 'Triwulan 4'];
+$trenScoreData = [
+    $baseAvgScore,
+    $triwulan['Q1']['avg'],
+    $triwulan['Q2']['avg'],
+    $triwulan['Q3']['avg'],
+    $triwulan['Q4']['avg']
+];
+
+$trenTotalRisk = (int)$stats['total_risiko'];
+$trenTotalHigh = $latestMonitored ? (int)$latestMonitored['tinggi'] : (int)$stats['tinggi'];
+$latestMonitoredAvg = $latestMonitored ? (float)$latestMonitored['avg'] : null;
+$scoreReductionPct = ($baseAvgScore > 0 && $latestMonitoredAvg !== null) ? round(($baseAvgScore - $latestMonitoredAvg) / $baseAvgScore * 100, 1) : 0;
+
+// Distribusi 5 Tingkat Risiko (Awal & TW1..TW4)
+$twLevels = [
+    'awal' => ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0],
+    'Q1'   => ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0],
+    'Q2'   => ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0],
+    'Q3'   => ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0],
+    'Q4'   => ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0],
+];
+$baseLevelsRaw = dashQuery($db, "
+    SELECT d.tingkat_risiko, COUNT(d.id) as cnt
+    FROM profil_risiko_detail d
+    JOIN profil_risiko p ON d.id_profil = p.id
+    WHERE $whereStr
+    GROUP BY d.tingkat_risiko
+", $types, $params);
+foreach ($baseLevelsRaw as $bl) {
+    $k = trim($bl['tingkat_risiko']);
+    if (isset($twLevels['awal'][$k])) $twLevels['awal'][$k] = (int)$bl['cnt'];
+}
+$monevLevelsRaw = dashQuery($db, "
+    SELECT m.triwulan, m.pantau_tingkat, COUNT(m.id) as cnt
+    FROM monev_triwulan m
+    JOIN kkpr_risiko r ON r.id = m.id_risiko
+    JOIN kkpr_header h ON h.id = r.id_kkpr
+    WHERE $whereMonevStr
+    GROUP BY m.triwulan, m.pantau_tingkat
+", $typesMonev, $paramsMonev);
+foreach ($monevLevelsRaw as $ml) {
+    $qKey = 'Q' . $ml['triwulan'];
+    $k = trim($ml['pantau_tingkat']);
+    if (isset($twLevels[$qKey][$k])) $twLevels[$qKey][$k] = (int)$ml['cnt'];
+}
+
+$levelKeys = ['Sangat Rendah', 'Rendah', 'Sedang', 'Tinggi', 'Sangat Tinggi'];
+$periodsKey = ['awal', 'Q1', 'Q2', 'Q3', 'Q4'];
+$trenLevelDatasets = [];
+foreach ($levelKeys as $lvl) {
+    $data = [];
+    foreach ($periodsKey as $pk) {
+        $data[] = $twLevels[$pk][$lvl] ?? 0;
+    }
+    $trenLevelDatasets[$lvl] = $data;
+}
+
+// Matriks TW1..TW4 Detail Items
+$twRows = dashQuery($db, "
+    SELECT m.id, m.id_risiko, m.triwulan, m.pantau_p, m.pantau_d, m.pantau_nilai, m.pantau_tingkat,
+           r.nama_risiko, r.kode_risiko, h.unit_pemilik_risiko
+    FROM monev_triwulan m
+    JOIN kkpr_risiko r ON r.id = m.id_risiko
+    JOIN kkpr_header h ON h.id = r.id_kkpr
+    WHERE $whereMonevStr
+    ORDER BY m.pantau_nilai DESC
+", $typesMonev, $paramsMonev);
+
+foreach ($twRows as $m) {
+    $twKey = 'tw' . (int)$m['triwulan'];
+    if (!isset($dashMatrixData[$twKey])) continue;
+    $p = max(1, min(5, (int)$m['pantau_p']));
+    $d = max(1, min(5, (int)$m['pantau_d']));
+    $skor = (int)round((float)$m['pantau_nilai']);
+    $level = trim((string)($m['pantau_tingkat'] ?: getLevelRisiko($skor)));
+    $dashMatrixData[$twKey]['counts'][$p][$d]++;
+    $dashMatrixData[$twKey]['items'][$p][$d][] = [
+        'id' => $m['id_risiko'],
+        'kode' => $m['kode_risiko'] ?: '-',
+        'nama' => $m['nama_risiko'] ?: '-',
+        'unit' => $m['unit_pemilik_risiko'] ?: '-',
+        'p' => $p,
+        'd' => $d,
+        'nilai' => $skor,
+        'tingkat' => $level,
+        'status' => 'Dipantau'
+    ];
+    $dashMatrixData[$twKey]['total']++;
+}
 
 $dashName = trim($_SESSION['user_nama'] ?? 'Pengguna');
 $dashFirstName = explode(' ', $dashName)[0] ?: 'Pengguna';
@@ -506,8 +678,31 @@ if (hasRole('Pimpinan') && $pendAppr > 0):
 
     <!-- Matriks Risiko 5x5 -->
     <div class="card" style="display:flex;flex-direction:column">
-      <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.05),transparent)">
-        <span class="card-title"><i class="fas fa-th" style="color:var(--accent)"></i> Matriks Risiko 5x5</span>
+      <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.05),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 18px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div>
+            <span class="card-title" style="margin:0;font-size:1.02rem;font-weight:800"><i class="fas fa-th" style="color:var(--accent);margin-right:4px"></i> Matriks Risiko 5&times;5</span>
+            <div id="dashMatrixSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+              Periode: <strong id="dashMatrixPeriodLabel" style="color:var(--accent)">Kondisi Awal</strong> &bull; <span id="dashMatrixCountInfo"><?= $dashMatrixData['awal']['total'] ?? (int)$stats['total_risiko'] ?> risiko</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Switcher Periode Triwulanan (Dropdown Ringkas & Rapi) -->
+        <div class="monev-matrix-tabs">
+          <label for="dashPeriodSelect" class="matrix-period-label" style="margin-bottom:0">
+            <i class="fas fa-sliders"></i> Pantau Periode:
+          </label>
+          <div class="matrix-select-wrap">
+            <select id="dashPeriodSelect" class="form-control matrix-period-select" onchange="switchDashMatrixPeriod(this.value)">
+              <option value="awal" selected>Kondisi Awal</option>
+              <option value="tw1">Triwulan 1</option>
+              <option value="tw2">Triwulan 2</option>
+              <option value="tw3">Triwulan 3</option>
+              <option value="tw4">Triwulan 4</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="card-body heatmap-wrap compact-heatmap" style="display:flex; flex-direction:column; align-items:center;justify-content:center;flex:1;padding:14px 12px;text-align:center">
         <?php
@@ -515,34 +710,36 @@ if (hasRole('Pimpinan') && $pendAppr > 0):
         $dLabels = [1=>'Tidak Signifikan',2=>'Kecil',3=>'Sedang',4=>'Besar',5=>'Katastropik'];
         $tingkatShort = fn($s) => $s>=20?'Sangat Tinggi':($s>=15?'Tinggi':($s>=10?'Sedang':($s>=5?'Rendah':'Sangat Rendah')));
         ?>
-        <table class="heatmap dashboard-heatmap-table">
+        <table class="heatmap dashboard-heatmap-table" id="dashHeatmapTable">
           <thead>
             <tr>
-              <th style="text-align:right;padding-right:8px">P \ D</th>
+              <th style="text-align:right;padding-right:8px;font-weight:800;color:var(--text-muted)">P \ D</th>
               <?php for($d=1;$d<=5;$d++): ?>
-                <th title="D<?= $d ?> = <?= $dLabels[$d] ?>">D<?= $d ?></th>
+                <th title="D<?= $d ?> = <?= $dLabels[$d] ?>" style="font-weight:800">D<?= $d ?></th>
               <?php endfor; ?>
             </tr>
           </thead>
           <tbody>
             <?php for($p=5;$p>=1;$p--): ?>
             <tr>
-              <th style="text-align:right;padding-right:8px;color:var(--text-muted);font-size:.7rem" title="P<?= $p ?> = <?= $pLabels[$p] ?>">P<?= $p ?></th>
+              <th style="text-align:right;padding-right:8px;color:var(--text-muted);font-size:.7rem;font-weight:800" title="P<?= $p ?> = <?= $pLabels[$p] ?>">P<?= $p ?></th>
               <?php for($d=1;$d<=5;$d++): ?>
               <?php
                 $skor = (int)round($p*$d*getBobot($p,$d));
-                $cnt  = $heatMap[$p][$d] ?? 0;
+                $cnt  = $dashMatrixData['awal']['counts'][$p][$d] ?? 0;
                 $bg   = heatmapColor($p,$d);
                 $tks  = $tingkatShort($skor);
                 $fg   = ($skor>=10 && $skor<=14) ? '#000' : '#fff';
               ?>
-              <td style="background:<?= $bg ?>;color:<?= $fg ?>; <?= $cnt > 0 ? 'cursor:pointer; transition: transform 0.2s, box-shadow 0.2s;' : '' ?>"
+              <td id="dash_cell_<?= $p ?>_<?= $d ?>"
+                  data-p="<?= $p ?>" data-d="<?= $d ?>" data-skor="<?= $skor ?>"
+                  style="background:<?= $bg ?>;color:<?= $fg ?>; <?= $cnt > 0 ? 'cursor:pointer; transition: transform 0.2s, box-shadow 0.2s;' : 'cursor:default;' ?>"
                   title="P<?= $p ?> (<?= $pLabels[$p] ?>) x D<?= $d ?> (<?= $dLabels[$d] ?>) x Bobot <?= getBobot($p,$d) ?> = <?= $skor ?> &rarr; <?= $tks ?> (<?= $cnt ?> risiko)"
-                  <?= $cnt > 0 ? "onclick=\"showHeatmapDetails($p, $d, $skor)\"" : "" ?>
+                  onclick="showDashHeatmapDetails(<?= $p ?>, <?= $d ?>, <?= $skor ?>)"
                   onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.2)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">
                 <div style="font-size:1rem;font-weight:800;line-height:1"><?= $skor ?></div>
                 <div style="font-size:.5rem;font-weight:600;opacity:.85;line-height:1.1;margin-top:1px;white-space:normal;word-wrap:break-word;text-align:center"><?= $tks ?></div>
-                <?php if($cnt>0): ?><span class="count-badge"><?= $cnt ?></span><?php endif; ?>
+                <span class="count-badge" id="dash_badge_<?= $p ?>_<?= $d ?>" style="<?= $cnt > 0 ? '' : 'display:none' ?>"><?= $cnt ?></span>
               </td>
               <?php endfor; ?>
             </tr>
@@ -560,27 +757,59 @@ if (hasRole('Pimpinan') && $pendAppr > 0):
         <div class="heatmap-desc" style="margin-top:8px;font-size:.65rem;color:var(--text-muted);text-align:center;line-height:1.6;width:100%">
           <strong>P</strong> = Probabilitas (1=Jarang, 2=Kecil, 3=Sedang, 4=Besar, 5=Hampir Pasti)<br>
           <strong>D</strong> = Dampak (1=Tidak Signifikan, 2=Kecil, 3=Sedang, 4=Besar, 5=Katastropik)<br>
-          <span style="font-size:.6rem;opacity:.8;display:inline-block;margin-top:4px">Klik sel untuk melihat daftar risiko di area tersebut.</span>
+          <span style="font-size:.6rem;opacity:.8;display:inline-block;margin-top:4px"><i class="fas fa-hand-pointer"></i> Klik sel untuk melihat daftar risiko &bull; Ganti <strong>Pantau Periode</strong> di atas untuk memantau pergeseran risiko tiap triwulan.</span>
         </div>
       </div>
     </div>
 
-    <!-- Tren Triwulanan -->
+    <!-- Tren Triwulanan (Opsi 3: Tren Skor & Komposisi Level) -->
     <div class="card dashboard-chart-card" style="display:flex;flex-direction:column">
-      <div class="card-header">
-        <span class="card-title"><i class="fas fa-chart-line" style="color:var(--accent)"></i> Tren Triwulanan</span>
-        <span class="dash-tab-count" style="background:var(--surface2);color:var(--text-muted)"><?= $trenTotalRisk ?> risiko</span>
+      <div class="card-header" style="background:linear-gradient(135deg,rgba(59,130,246,.05),transparent);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 18px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div>
+            <span class="card-title" style="margin:0;font-size:1.02rem;font-weight:800"><i class="fas fa-chart-line" style="color:var(--accent);margin-right:4px"></i> Tren Evaluasi Triwulanan</span>
+            <div id="trenSubtitle" style="font-size:.74rem;color:var(--text-muted);margin-top:2px">
+              Progres risiko &bull; <strong id="trenModeLabel" style="color:var(--accent)">Tren Penurunan Skor</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Switcher Mode: Tren Skor vs Komposisi Level -->
+        <div class="trend-switcher-wrap">
+          <button type="button" id="btnTrendScore" class="trend-mode-btn active" onclick="switchTrendChartMode('score')" title="Lihat tren penurunan rata-rata skor risiko">
+            <i class="fas fa-chart-area"></i> Tren Skor
+          </button>
+          <button type="button" id="btnTrendLevel" class="trend-mode-btn" onclick="switchTrendChartMode('level')" title="Lihat komposisi 5 tingkat risiko">
+            <i class="fas fa-chart-simple"></i> Komposisi Level
+          </button>
+        </div>
       </div>
-      <div class="trend-summary">
-        <span class="trend-chip"><i class="fas fa-database" style="color:var(--accent)"></i> Total <strong><?= $trenTotalRisk ?></strong></span>
-        <span class="trend-chip"><i class="fas fa-fire" style="color:var(--danger)"></i> Tinggi+ <strong><?= $trenTotalHigh ?></strong></span>
-        <span class="trend-chip"><i class="fas fa-chart-simple" style="color:var(--success)"></i> Rata-rata triwulan terakhir <strong><?= max($trenAvg) >= 0 ? number_format(max($trenAvg),1) : 0 ?></strong></span>
+
+      <!-- Summary Chips (Mode-aware) -->
+      <div class="trend-summary" id="trendSummaryChips" style="padding:10px 18px 0;display:flex;flex-wrap:wrap;gap:8px">
+        <div id="chipsTrendScore" style="display:flex;flex-wrap:wrap;gap:8px;width:100%">
+          <span class="trend-chip"><i class="fas fa-flag-checkered" style="color:var(--text-muted)"></i> Skor Awal <strong><?= number_format($baseAvgScore, 1) ?></strong></span>
+          <span class="trend-chip"><i class="fas fa-chart-line" style="color:var(--accent)"></i> Terakhir (TW <?= $latestTwNum ?>) <strong><?= number_format($latestMonitoredAvg, 1) ?></strong></span>
+          <span class="trend-chip"><i class="fas fa-arrow-trend-down" style="color:var(--success)"></i> Penurunan <strong style="color:var(--success)">&darr; <?= number_format($scoreReductionPct, 1) ?>%</strong></span>
+          <span class="trend-chip"><i class="fas fa-bullseye" style="color:#f59e0b"></i> Target <strong>&le; 10.0 (Sedang)</strong></span>
+        </div>
+        <div id="chipsTrendLevel" style="display:none;flex-wrap:wrap;gap:8px;width:100%">
+          <span class="trend-chip"><i class="fas fa-fire" style="color:var(--danger)"></i> Tinggi+ Awal <strong><?= $baseHighCount ?></strong></span>
+          <span class="trend-chip"><i class="fas fa-shield-halved" style="color:var(--accent)"></i> Tinggi+ TW <?= $latestTwNum ?> <strong><?= $trenTotalHigh ?></strong></span>
+          <span class="trend-chip"><i class="fas fa-arrow-down" style="color:var(--success)"></i> Berkurang <strong style="color:var(--success)">&darr; <?= max(0, $baseHighCount - $trenTotalHigh) ?> risiko</strong></span>
+          <span class="trend-chip"><i class="fas fa-circle-check" style="color:var(--success)"></i> Sangat Tinggi <strong><?= $twLevels['Q' . $latestTwNum]['Sangat Tinggi'] ?? 0 ?></strong></span>
+        </div>
       </div>
+
       <div class="card-body trend-chart-body" style="flex:1">
         <canvas id="trenChart"></canvas>
       </div>
-      <div class="trend-quarter-note">
-        <strong>Keterangan:</strong> Q berarti Triwulan &bull; Q1 Jan&ndash;Mar &bull; Q2 Apr&ndash;Jun &bull; Q3 Jul&ndash;Sep &bull; Q4 Okt&ndash;Des
+
+      <div class="trend-quarter-note" id="trendNote">
+        <i class="fas fa-circle-info" style="color:var(--accent);margin-right:4px"></i>
+        <span id="trendNoteText">
+          Garis hijau menunjukkan skor rata-rata risiko menurun dari <strong><?= number_format($baseAvgScore, 1) ?></strong> menjadi <strong><?= number_format($latestMonitoredAvg, 1) ?></strong> (&darr; <?= number_format($scoreReductionPct, 1) ?>%), kini berada di bawah batas selera risiko (10.0).
+        </span>
       </div>
     </div>
 
@@ -623,10 +852,19 @@ if (hasRole('Pimpinan') && $pendAppr > 0):
               'Sangat Rendah' => '#3b82f6',
               default => 'var(--text-muted)',
             }; ?>
-          <a href="<?= APP_URL ?>/?page=laporan_konsolidasi&tab=profil" style="display:grid;grid-template-columns:46px minmax(0,1fr) 54px;gap:12px;align-items:center;min-height:68px;padding:11px 20px;text-decoration:none;color:inherit;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <a href="<?= APP_URL ?>/?page=risiko&detail=<?= (int)$priority['id_risiko'] ?>" style="display:grid;grid-template-columns:46px minmax(0,1fr) 54px;gap:12px;align-items:center;min-height:68px;padding:11px 20px;text-decoration:none;color:inherit;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" title="Buka Detail &amp; Rekomendasi Mitigasi: <?= xss($priority['nama_risiko']) ?>">
             <strong style="font-size:1.05rem;color:var(--text-muted)"><?= $priorityRankStart + $rank ?></strong>
-            <span style="min-width:0;font-size:.82rem;font-weight:700;line-height:1.35;overflow-wrap:anywhere"><?= xss($priority['nama_risiko']) ?>
-              <small style="display:block;color:<?= $priorityLevelColor ?>;font-size:.7rem;font-weight:700;margin-top:3px"><?= xss($priority['level_risiko']) ?></small>
+            <span style="min-width:0;font-size:.82rem;font-weight:700;line-height:1.35;overflow-wrap:anywhere">
+              <?php if (!empty($priority['kode_risiko'])): ?>
+                <span class="badge-kode-risiko" style="font-size:.7rem;padding:1px 6px;margin-right:6px;vertical-align:middle"><?= xss($priority['kode_risiko']) ?></span>
+              <?php endif; ?>
+              <?= xss($priority['nama_risiko']) ?>
+              <small style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;color:<?= $priorityLevelColor ?>;font-size:.7rem;font-weight:700;margin-top:3px">
+                <span><?= xss($priority['level_risiko']) ?></span>
+                <?php if (!empty($priority['unit_pemilik_risiko'])): ?>
+                <span style="color:var(--text-muted);font-weight:500;display:inline-flex;align-items:center;gap:3px"><i class="fas fa-building" style="font-size:.65rem;opacity:.7"></i> <?= xss($priority['unit_pemilik_risiko']) ?></span>
+                <?php endif; ?>
+              </small>
               <?php if ($priority['penanggungjawab'] || $priority['jadwal_pelaksanaan'] || $priority['rencana_penanganan']): ?>
               <small style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;color:var(--text-muted);font-size:.68rem;font-weight:500">
                 <?php if ($priority['penanggungjawab']): ?><span><i class="fas fa-user"></i> <?= xss($priority['penanggungjawab']) ?></span><?php endif; ?>
@@ -635,7 +873,7 @@ if (hasRole('Pimpinan') && $pendAppr > 0):
               </small>
               <?php endif; ?>
             </span>
-            <strong style="font-size:1.25rem;text-align:right;color:<?= (float)$priority['skor_risiko'] >= 20 ? '#dc2626' : ((float)$priority['skor_risiko'] >= 15 ? '#ea580c' : '#ca8a04') ?>"><?= (float)$priority['skor_risiko'] ?></strong>
+            <strong style="font-size:1.25rem;text-align:right;color:<?= (float)$priority['skor_risiko'] >= 20 ? '#dc2626' : ((float)$priority['skor_risiko'] >= 15 ? '#ea580c' : '#ca8a04') ?>" title="Skor: <?= (float)$priority['skor_risiko'] ?>"><?= (float)$priority['skor_risiko'] ?></strong>
           </a><?php endforeach; ?>
         </div><?php endif; ?>
         <?php if ($priorityTotalPages > 1): ?>
@@ -692,92 +930,454 @@ if (searchInput) {
 }
 
 
-// Semua zona tampil berurutan → inisialisasi chart tren saat halaman dimuat
-initRingkasanCharts();
+// Dataset & Konfigurasi Tren Triwulanan (Opsi 3)
+const trenLabels = <?= json_encode($trenLabelsOpt3) ?>;
+const trenScoreData = <?= json_encode($trenScoreData) ?>;
+const trenLevelDatasets = <?= json_encode($trenLevelDatasets) ?>;
+const baseAvgScore = <?= json_encode(number_format($baseAvgScore, 1)) ?>;
+const latestAvgScore = <?= json_encode($latestMonitoredAvg !== null ? number_format($latestMonitoredAvg, 1) : '-') ?>;
+const reductionPct = <?= json_encode(number_format($scoreReductionPct, 1)) ?>;
+const gridColor = isDarkOnLoad ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+window.currentTrendMode = 'score';
+
+function getScoreChartConfig(isDark, labels, scoreData, gridColor) {
+  return {
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'line',
+          label: 'Rata-rata Skor Risiko',
+          data: scoreData,
+          borderColor: '#10b981',
+          backgroundColor: function(context) {
+            const chart = context.chart;
+            const {ctx, chartArea} = chart;
+            if (!chartArea) return 'rgba(16,185,129,0.18)';
+            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(16,185,129,0.35)');
+            gradient.addColorStop(0.7, 'rgba(16,185,129,0.08)');
+            gradient.addColorStop(1, 'rgba(16,185,129,0.00)');
+            return gradient;
+          },
+          fill: true,
+          tension: 0.35,
+          spanGaps: false,
+          pointRadius: 6,
+          pointHoverRadius: 9,
+          pointBackgroundColor: isDark ? '#1e293b' : '#ffffff',
+          pointBorderColor: '#10b981',
+          pointBorderWidth: 3,
+          borderWidth: 3,
+          order: 1
+        },
+        {
+          type: 'line',
+          label: 'Batas Selera Risiko (10.0)',
+          data: [10, 10, 10, 10, 10],
+          borderColor: '#f59e0b',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+          tension: 0,
+          order: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: {
+          beginAtZero: true,
+          suggestedMax: 18,
+          grid: { color: gridColor },
+          title: { display: true, text: 'Rata-rata Skor Risiko' }
+        },
+        x: {
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 14,
+            boxHeight: 14,
+            usePointStyle: true,
+            font: { size: 11, weight: '600' }
+          }
+        },
+        tooltip: {
+          backgroundColor: isDark ? '#1e293b' : '#fff',
+          titleColor: isDark ? '#fff' : '#1e293b',
+          bodyColor: isDark ? '#cbd5e1' : '#475569',
+          borderColor: isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)',
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.raw === null || ctx.raw === undefined) return null;
+              if (ctx.datasetIndex === 1) return ` Batas Toleransi: ${ctx.raw} (Sedang)`;
+              return ` Rata-rata Skor: ${ctx.raw} poin`;
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+function getLevelChartConfig(isDark, labels, levelDatasets, gridColor) {
+  return {
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Sangat Rendah',
+          data: levelDatasets['Sangat Rendah'],
+          backgroundColor: '#3b82f6',
+          borderRadius: 4,
+          stack: 'level'
+        },
+        {
+          type: 'bar',
+          label: 'Rendah',
+          data: levelDatasets['Rendah'],
+          backgroundColor: '#22c55e',
+          borderRadius: 4,
+          stack: 'level'
+        },
+        {
+          type: 'bar',
+          label: 'Sedang',
+          data: levelDatasets['Sedang'],
+          backgroundColor: '#eab308',
+          borderRadius: 4,
+          stack: 'level'
+        },
+        {
+          type: 'bar',
+          label: 'Tinggi',
+          data: levelDatasets['Tinggi'],
+          backgroundColor: '#f97316',
+          borderRadius: 4,
+          stack: 'level'
+        },
+        {
+          type: 'bar',
+          label: 'Sangat Tinggi',
+          data: levelDatasets['Sangat Tinggi'],
+          backgroundColor: '#dc2626',
+          borderRadius: 4,
+          stack: 'level'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          suggestedMax: 85,
+          grid: { color: gridColor },
+          title: { display: true, text: 'Jumlah Risiko' }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            boxHeight: 12,
+            usePointStyle: true,
+            font: { size: 11, weight: '600' }
+          }
+        },
+        tooltip: {
+          backgroundColor: isDark ? '#1e293b' : '#fff',
+          titleColor: isDark ? '#fff' : '#1e293b',
+          bodyColor: isDark ? '#cbd5e1' : '#475569',
+          borderColor: isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)',
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.raw === 0) return null;
+              return ` ${ctx.dataset.label}: ${ctx.raw} risiko`;
+            }
+          }
+        }
+      }
+    }
+  };
+}
 
 function initRingkasanCharts() {
   if (ringkasInitDone) return;
   ringkasInitDone = true;
   if (typeof Chart === 'undefined') return;
 
-  // Tren Triwulanan (zona Ringkasan)
   const trenEl = document.getElementById('trenChart');
   if (trenEl) {
-    const labels = <?= json_encode($trenLabels) ?>;
-    const jml    = <?= json_encode($trenJml) ?>;
-    const tinggi = <?= json_encode($trenTinggi) ?>;
-    const avg    = <?= json_encode($trenAvg) ?>;
-    const gridColor = isDarkOnLoad ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
-    trenChart = new Chart(trenEl.getContext('2d'), {
-      data: {
-        labels: labels,
-        datasets: [
-          { type: 'bar', label: 'Jumlah Risiko', data: jml, backgroundColor: isDarkOnLoad ? 'rgba(59,130,246,.75)' : 'rgba(59,130,246,.80)', borderRadius: 6, yAxisID: 'y', order: 2 },
-          { type: 'bar', label: 'Risiko Tinggi+', data: tinggi, backgroundColor: isDarkOnLoad ? 'rgba(239,68,68,.75)' : 'rgba(239,68,68,.80)', borderRadius: 6, yAxisID: 'y', order: 3 },
-          { type: 'line', label: 'Rata-rata Skor', data: avg, borderColor: '#16a34a', backgroundColor: '#16a34a', tension: .35, pointRadius: 4, pointBackgroundColor: '#16a34a', borderWidth: 2.5, yAxisID: 'y1', order: 1 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          y: { beginAtZero: true, grid: { color: gridColor }, title: { display: true, text: 'Jumlah risiko' } },
-          y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Rata-rata skor' } }
-        },
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } },
-          tooltip: { backgroundColor: isDarkOnLoad ? '#1e293b' : '#fff', titleColor: isDarkOnLoad ? '#fff' : '#1e293b', bodyColor: isDarkOnLoad ? '#cbd5e1' : '#475569', borderColor: isDarkOnLoad ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)', borderWidth: 1, padding: 10, cornerRadius: 8 }
-        }
-      }
-    });
+    const cfg = getScoreChartConfig(isDarkOnLoad, trenLabels, trenScoreData, gridColor);
+    trenChart = new Chart(trenEl.getContext('2d'), cfg);
   }
 }
+initRingkasanCharts();
 
-// -- Heatmap Interaktif (SweetAlert2) --
-window.showHeatmapDetails = function(p, d, skor) {
-    Swal.fire({ title: 'Memuat data...', text: 'Silakan tunggu', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+window.switchTrendChartMode = function(mode) {
+  if (!trenChart) return;
+  window.currentTrendMode = mode;
+  const btnScore = document.getElementById('btnTrendScore');
+  const btnLevel = document.getElementById('btnTrendLevel');
+  const chipsScore = document.getElementById('chipsTrendScore');
+  const chipsLevel = document.getElementById('chipsTrendLevel');
+  const modeLabel = document.getElementById('trenModeLabel');
+  const noteText = document.getElementById('trendNoteText');
 
-    fetch('<?= APP_URL ?>/api.php/heatmap?p=' + p + '&d=' + d, {
-        headers: {'X-CSRF-Token': window.CSRF_TOKEN || ''},
-        credentials: 'same-origin'
-    })
-    .then(res => res.json())
-    .then(res => {
-        if (res.status === 'success') {
-            if (res.data.length === 0) { Swal.fire('Info', 'Tidak ada risiko di area ini.', 'info'); return; }
-            const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
-            let html = '<div style="max-height: 300px; overflow-y: auto; text-align: left;">';
-            html += '<table class="data-table" style="width: 100%; border-collapse: collapse;">';
-            html += '<thead style="position: sticky; top: 0; background: var(--surface);"><tr><th style="padding:8px;border-bottom:1px solid var(--border)">Kode</th><th style="padding:8px;border-bottom:1px solid var(--border)">Nama Risiko</th><th style="padding:8px;border-bottom:1px solid var(--border)">Level</th></tr></thead><tbody>';
-            res.data.forEach(item => {
-                let bgC = '#3b82f6', fgC = '#fff';
-                if(item.level_risiko === 'Sangat Tinggi') bgC = '#dc2626';
-                else if(item.level_risiko === 'Tinggi') bgC = '#f97316';
-                else if(item.level_risiko === 'Sedang') { bgC = '#FFFF00'; fgC = '#1e293b'; }
-                else if(item.level_risiko === 'Rendah') bgC = '#22c55e';
-                const kodeRisiko = escapeHtml(item.kode_risiko);
-                const namaRisiko = escapeHtml(item.nama_risiko);
-                const levelRisiko = escapeHtml(item.level_risiko);
-                const namaCell = item.risiko_id
-                    ? `<a href="<?= APP_URL ?>/?page=risiko&detail=${encodeURIComponent(item.risiko_id)}" style="color:var(--accent);font-weight:700;text-decoration:none" title="Buka detail risiko ${namaRisiko}">${namaRisiko}</a>`
-                    : namaRisiko;
-                html += `<tr>
-                    <td style="padding:8px;border-bottom:1px solid var(--border)"><code style="color:var(--accent);font-size:0.8rem">${kodeRisiko}</code></td>
-                    <td style="padding:8px;border-bottom:1px solid var(--border);max-width:200px;white-space:normal">${namaCell}</td>
-                    <td style="padding:8px;border-bottom:1px solid var(--border)"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:700;background:${bgC};color:${fgC}">${levelRisiko}</span></td>
-                </tr>`;
-            });
-            html += '</tbody></table></div>';
-            Swal.fire({ title: `Daftar Risiko (P${p} x D${d} = ${skor})`, html: html, width: 600, showCloseButton: true, showConfirmButton: false });
-        } else { Swal.fire('Error', res.message, 'error'); }
-    })
-    .catch(err => { Swal.fire('Error', 'Gagal mengambil data', 'error'); });
+  if (mode === 'level') {
+    if (btnScore) btnScore.classList.remove('active');
+    if (btnLevel) btnLevel.classList.add('active');
+    if (chipsScore) chipsScore.style.display = 'none';
+    if (chipsLevel) chipsLevel.style.display = 'flex';
+    if (modeLabel) modeLabel.textContent = 'Komposisi 5 Level Risiko';
+    if (noteText) noteText.innerHTML = 'Grafik batang bertumpuk menunjukkan pergeseran komposisi tingkat risiko. Porsi risiko <strong>Tinggi &amp; Sangat Tinggi</strong> menyusut drastis dan didominasi level aman (Sedang/Rendah).';
+
+    const cfg = getLevelChartConfig(isDarkOnLoad, trenLabels, trenLevelDatasets, gridColor);
+    trenChart.data = cfg.data;
+    trenChart.options = cfg.options;
+    trenChart.update();
+  } else {
+    if (btnLevel) btnLevel.classList.remove('active');
+    if (btnScore) btnScore.classList.add('active');
+    if (chipsLevel) chipsLevel.style.display = 'none';
+    if (chipsScore) chipsScore.style.display = 'flex';
+    if (modeLabel) modeLabel.textContent = 'Tren Penurunan Skor';
+    if (noteText) noteText.innerHTML = 'Garis hijau menunjukkan skor rata-rata risiko menurun dari <strong>' + baseAvgScore + '</strong> menjadi <strong>' + latestAvgScore + '</strong> (&darr; ' + reductionPct + '%), kini berada di bawah batas selera risiko (10.0).';
+
+    const cfg = getScoreChartConfig(isDarkOnLoad, trenLabels, trenScoreData, gridColor);
+    trenChart.data = cfg.data;
+    trenChart.options = cfg.options;
+    trenChart.update();
+  }
 };
+
+// ── Data & Interaksi Matriks Risiko Dashboard (Pantau Periode) ──
+window.rawDashMatrixData = <?= json_encode($dashMatrixData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+window.currentDashPeriod = 'awal';
+
+window.switchDashMatrixPeriod = function(period) {
+  window.currentDashPeriod = period;
+  const sel = document.getElementById('dashPeriodSelect');
+  if (sel && sel.value !== period) {
+    sel.value = period;
+  }
+  const pData = window.rawDashMatrixData[period] || { label: '', total: 0, counts: {}, items: {} };
+  
+  const lbl = document.getElementById('dashMatrixPeriodLabel');
+  const cntInfo = document.getElementById('dashMatrixCountInfo');
+  if (lbl) lbl.textContent = pData.label;
+  if (cntInfo) cntInfo.textContent = `${pData.total} risiko terpantau`;
+
+  for (let p = 1; p <= 5; p++) {
+    for (let d = 1; d <= 5; d++) {
+      const cnt = (pData.counts && pData.counts[p] && pData.counts[p][d]) || 0;
+      const cell = document.getElementById(`dash_cell_${p}_${d}`);
+      const badge = document.getElementById(`dash_badge_${p}_${d}`);
+      if (badge) {
+        if (cnt > 0) {
+          badge.textContent = cnt;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+      if (cell) {
+        cell.style.cursor = cnt > 0 ? 'pointer' : 'default';
+        cell.style.opacity = (pData.total > 0 && cnt === 0) ? '0.78' : '1';
+        cell.title = `P${p} x D${d} = ${cell.dataset.skor} (${cnt} risiko pada ${pData.label})`;
+      }
+    }
+  }
+};
+
+window.showDashHeatmapDetails = function(p, d, skor) {
+  const pData = window.rawDashMatrixData[window.currentDashPeriod];
+  const items = (pData && pData.items && pData.items[p] && pData.items[p][d]) || [];
+  
+  if (!items || items.length === 0) {
+    Swal.fire({
+      title: `Sel P${p} x D${d} = ${skor}`,
+      text: `Tidak ada risiko pada koordinat ini untuk periode ${pData ? pData.label : ''}.`,
+      icon: 'info',
+      confirmButtonText: 'Tutup'
+    });
+    return;
+  }
+
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+  let html = '<div style="max-height: 320px; overflow-y: auto; text-align: left; margin-top:8px">';
+  html += '<table class="data-table" style="width: 100%; border-collapse: collapse; font-size:.82rem">';
+  html += '<thead style="position: sticky; top: 0; background: var(--surface2); z-index:2"><tr>' +
+          '<th style="padding:8px;border-bottom:1px solid var(--border);width:75px">Kode</th>' +
+          '<th style="padding:8px;border-bottom:1px solid var(--border)">Nama Risiko</th>' +
+          '<th style="padding:8px;border-bottom:1px solid var(--border);text-align:center;width:95px">Level</th>' +
+          '<th style="padding:8px;border-bottom:1px solid var(--border);text-align:center;width:55px">Skor</th>' +
+          '</tr></thead><tbody>';
+
+  items.forEach(item => {
+    let bgC = '#3b82f6', fgC = '#fff';
+    if (item.tingkat === 'Sangat Tinggi') bgC = '#dc2626';
+    else if (item.tingkat === 'Tinggi') bgC = '#f97316';
+    else if (item.tingkat === 'Sedang') { bgC = '#FFFF00'; fgC = '#1e293b'; }
+    else if (item.tingkat === 'Rendah') bgC = '#22c55e';
+
+    const kode = escapeHtml(item.kode);
+    const nama = escapeHtml(item.nama);
+    const level = escapeHtml(item.tingkat);
+    const nilai = escapeHtml(item.nilai);
+    const unit = escapeHtml(item.unit);
+    const id = item.id;
+    const namaLink = id
+      ? `<a href="<?= APP_URL ?>/?page=risiko&detail=${encodeURIComponent(id)}" style="color:var(--accent);font-weight:700;text-decoration:none" title="Buka detail ${nama}">${nama}</a>`
+      : `<span style="font-weight:700;color:var(--text)">${nama}</span>`;
+
+    html += `<tr>
+      <td style="padding:8px;border-bottom:1px solid var(--border)"><code style="color:var(--accent);font-size:0.8rem">${kode}</code></td>
+      <td style="padding:8px;border-bottom:1px solid var(--border);max-width:240px;white-space:normal">
+        <div>${namaLink}</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px"><i class="fas fa-building" style="opacity:.6"></i> ${unit}</div>
+      </td>
+      <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center">
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;background:${bgC};color:${fgC}">${level}</span>
+      </td>
+      <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-weight:800;color:var(--accent)">
+        ${nilai}
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  Swal.fire({
+    title: `Daftar Risiko (${pData.label} — P${p} x D${d} = ${skor})`,
+    html: html,
+    width: 620,
+    showCloseButton: true,
+    showConfirmButton: false
+  });
+};
+
+// Alias untuk kompatibilitas
+window.showHeatmapDetails = window.showDashHeatmapDetails;
 
 }); // end DOMContentLoaded
 </script>
 
 <style>
+/* Switcher Periode Dropdown Ringkas & Rapi */
+.monev-matrix-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  padding: 4px 10px 4px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.matrix-period-label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.matrix-period-label i {
+  color: var(--accent);
+}
+.matrix-select-wrap {
+  position: relative;
+  display: inline-block;
+}
+.matrix-period-select {
+  font-size: .8rem !important;
+  font-weight: 700 !important;
+  color: var(--text) !important;
+  background-color: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  padding: 4px 28px 4px 10px !important;
+  height: 32px !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  transition: all .2s ease;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 14px 14px !important;
+}
+.matrix-period-select:hover {
+  border-color: var(--accent) !important;
+  background-color: var(--surface) !important;
+}
+.matrix-period-select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.18) !important;
+}
+
+/* Switcher Mode: Tren Skor vs Komposisi Level */
+.trend-switcher-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+}
+.trend-mode-btn {
+  font-size: .75rem !important;
+  font-weight: 700 !important;
+  padding: 4px 10px !important;
+  border-radius: 7px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  transition: all .2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.2;
+}
+.trend-mode-btn:hover {
+  color: var(--text) !important;
+}
+.trend-mode-btn.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3) !important;
+}
+
 .heatmap-wrap.compact-heatmap{overflow:visible!important}
 .dashboard-heatmap-table{width:100%!important;table-layout:fixed;border-collapse:separate;border-spacing:4px}
 .dashboard-heatmap-table th,.dashboard-heatmap-table td{box-sizing:border-box}
