@@ -64,27 +64,182 @@ $unitKerjaList = [
 /**
  * Warna latar belakang sel tingkat risiko (konsisten dengan kkpr.php).
  */
-function laporanRisikoBg(string $tingkat): string {
-    return match($tingkat) {
-        'Sangat Tinggi' => '#fee2e2',
-        'Tinggi'        => '#ffedd5',
-        'Sedang'        => '#fefce8',
-        'Rendah'        => '#dcfce7',
-        default         => '#f3f4f6',
-    };
+if (!function_exists('laporanRisikoBg')) {
+    function laporanRisikoBg(string $tingkat): string {
+        return match($tingkat) {
+            'Sangat Tinggi' => '#fee2e2',
+            'Tinggi'        => '#ffedd5',
+            'Sedang'        => '#fefce8',
+            'Rendah'        => '#dcfce7',
+            default         => '#f3f4f6',
+        };
+    }
+}
+
+if (!function_exists('laporanRisikoColor')) {
+    function laporanRisikoColor(string $tingkat): string {
+        return match($tingkat) {
+            'Sangat Tinggi' => '#991b1b',
+            'Tinggi'        => '#9a3412',
+            'Sedang'        => '#854d0e',
+            'Rendah'        => '#166534',
+            default         => '#374151',
+        };
+    }
 }
 
 /**
- * Warna teks sel tingkat risiko.
+ * Format teks upaya pengendalian di sel tabel:
+ * Jika ada lebih dari 1 butir (baris baru atau penomoran 1., 2.),
+ * pisahkan tiap butir ke baris baru (<br>).
  */
-function laporanRisikoColor(string $tingkat): string {
-    return match($tingkat) {
-        'Sangat Tinggi' => '#991b1b',
-        'Tinggi'        => '#9a3412',
-        'Sedang'        => '#854d0e',
-        'Rendah'        => '#166534',
-        default         => '#374151',
-    };
+if (!function_exists('laporanFormatUpayaHtml')) {
+    function laporanFormatUpayaHtml(?string $upayaRaw): string {
+        if ($upayaRaw === null || trim($upayaRaw) === '' || trim($upayaRaw) === '-') {
+            return '-';
+        }
+        $raw = trim($upayaRaw);
+        $normalized = preg_replace('/(?<!\n|^)\s+(\d+\.\s+)/u', "\n$1", $raw);
+        $normalized = preg_replace('/(?<!\n|^)\s+([a-zA-Z]\.\s+)/u', "\n$1", $normalized);
+        $lines = preg_split('/\r\n|\r|\n/', $normalized);
+        $out = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line !== '') {
+                $out[] = xss($line);
+            }
+        }
+        return empty($out) ? '-' : implode('<br>', $out);
+    }
+}
+
+if (!function_exists('laporanFormatUpayaLines')) {
+    function laporanFormatUpayaLines(?string $upayaRaw): array {
+        if ($upayaRaw === null || trim($upayaRaw) === '' || trim($upayaRaw) === '-') {
+            return ['-'];
+        }
+        $raw = trim($upayaRaw);
+        $normalized = preg_replace('/(?<!\n|^)\s+(\d+\.\s+)/u', "\n$1", $raw);
+        $normalized = preg_replace('/(?<!\n|^)\s+([a-zA-Z]\.\s+)/u', "\n$1", $normalized);
+        $lines = preg_split('/\r\n|\r|\n/', $normalized);
+        $out = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line !== '') {
+                $out[] = $line;
+            }
+        }
+        return empty($out) ? ['-'] : $out;
+    }
+}
+
+if (!function_exists('laporanPecahItemDaftar')) {
+    function laporanPecahItemDaftar(array $rawList): array {
+        $items = [];
+        foreach ($rawList as $raw) {
+            $raw = trim((string)$raw);
+            if ($raw === '' || $raw === '-') {
+                continue;
+            }
+
+            $normalized = preg_replace('/(?<!\n|^)\s+(\d+\.\s+)/u', "\n$1", $raw);
+            $normalized = preg_replace('/(?<!\n|^)\s+([a-zA-Z]\.\s+)/u', "\n$1", $normalized);
+
+            $lines = preg_split('/\r\n|\r|\n/', $normalized);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || $line === '-') {
+                    continue;
+                }
+                $clean = preg_replace('/^(\d+[\.\)]\s*|[a-zA-Z][\.\)]\s*|[-•*]\s*)/u', '', $line);
+                $clean = trim($clean);
+                if ($clean !== '' && !in_array($clean, $items, true)) {
+                    $items[] = $clean;
+                }
+            }
+        }
+        return $items;
+    }
+}
+
+if (!function_exists('laporanFormatItemPrefix')) {
+    function laporanFormatItemPrefix(int $unitNo, int $index): string {
+        $letters = '';
+        $n = $index;
+        do {
+            $letters = chr(97 + ($n % 26)) . $letters;
+            $n = intdiv($n, 26) - 1;
+        } while ($n >= 0);
+        return "{$unitNo}.{$letters}. ";
+    }
+}
+
+if (!function_exists('laporanFormatLetterPrefix')) {
+    function laporanFormatLetterPrefix(int $index): string {
+        $letters = '';
+        $n = $index;
+        do {
+            $letters = chr(97 + ($n % 26)) . $letters;
+            $n = intdiv($n, 26) - 1;
+        } while ($n >= 0);
+        return "{$letters}. ";
+    }
+}
+
+/**
+ * Pastikan tabel laporan_monev_draft tersedia di database.
+ */
+if (!function_exists('laporanEnsureDraftTable')) {
+    function laporanEnsureDraftTable(mysqli $db): void {
+        $db->query("CREATE TABLE IF NOT EXISTS laporan_monev_draft (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tahun VARCHAR(10) NOT NULL,
+            triwulan INT NOT NULL,
+            konten_html MEDIUMTEXT NOT NULL,
+            user_id INT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_laporan_monev_periode (tahun, triwulan)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }
+}
+
+if (!function_exists('laporanSanitizeDraftHtml')) {
+    function laporanSanitizeDraftHtml(string $html): string {
+        if (trim($html) === '') {
+            return '';
+        }
+        $doc = new DOMDocument();
+        libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="UTF-8"><div>' . $html . '</div>', LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+
+        $xpath = new DOMXPath($doc);
+        foreach (iterator_to_array($xpath->query('//script')) as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+        foreach ($xpath->query('//*') as $el) {
+            if ($el instanceof DOMElement) {
+                foreach (iterator_to_array($el->attributes ?? []) as $attr) {
+                    $name = strtolower($attr->name);
+                    $val  = strtolower(trim($attr->value));
+                    if (str_starts_with($name, 'on') || str_starts_with($val, 'javascript:')) {
+                        $el->removeAttribute($attr->name);
+                    }
+                }
+            }
+        }
+
+        $container = $doc->getElementsByTagName('div')->item(0);
+        if (!$container) {
+            return $html;
+        }
+        $output = '';
+        foreach ($container->childNodes as $child) {
+            $output .= $doc->saveHTML($child);
+        }
+        return trim($output);
+    }
 }
 
 /**
@@ -93,172 +248,398 @@ function laporanRisikoColor(string $tingkat): string {
  *
  * @return array[] Rows dengan semua kolom yang dibutuhkan
  */
-function laporanGetDataUnit(mysqli $db, string $unitKerja, string $tahun, int $triwulan): array {
-    $sql = "
-        SELECT
-            r.kode_risiko,
-            r.nama_risiko,
-            r.probabilitas        AS awal_p,
-            r.dampak_level        AS awal_d,
-            r.nilai_risiko        AS awal_nilai,
-            r.tingkat_risiko      AS awal_tingkat,
-            m.upaya_pengendalian,
-            m.pantau_p            AS akhir_p,
-            m.pantau_d            AS akhir_d,
-            m.pantau_nilai        AS akhir_nilai,
-            m.pantau_tingkat      AS akhir_tingkat,
-            m.kendala,
-            m.rencana_tindak_lanjut
-        FROM kkpr_risiko r
-        INNER JOIN kkpr_header h ON h.id = r.id_kkpr
-        LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
-        WHERE h.tahun = ?
-          AND h.unit_pemilik_risiko LIKE ?
-        ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
-    ";
+if (!function_exists('laporanGetDataUnit')) {
+    function laporanGetDataUnit(mysqli $db, string $unitKerja, string $tahun, int $triwulan): array {
+        $prefixMap = [
+            'Sub Bagian Administrasi Umum'                          => 'A',
+            'Tim Kerja Program Layanan'                             => 'L',
+            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
+            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
+            'Instalasi'                                             => 'I',
+            'Gratifikasi'                                           => 'G',
+        ];
 
-    $unitLike = '%' . $unitKerja . '%';
-    $stmt = $db->prepare($sql);
-    $stmt->bind_param('iss', $triwulan, $tahun, $unitLike);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $rows = [];
-    while ($row = $result->fetch_assoc()) {
-        $rows[] = $row;
-    }
-    $stmt->close();
-    return $rows;
-}
+        $prefix = $prefixMap[$unitKerja] ?? '';
+        $unitLike = '%' . $unitKerja . '%';
 
-/**
- * Ambil nilai unik non-kosong dari kolom monev untuk satu unit kerja.
- * Kolom yang didukung: 'kendala', 'rencana_tindak_lanjut'.
- *
- * @return string[] Array nilai unik non-kosong
- */
-function laporanGetAggregat(mysqli $db, string $unitKerja, string $tahun, int $triwulan, string $kolom): array {
-    // Whitelist kolom untuk mencegah SQL injection
-    $kolomDiizinkan = ['kendala', 'rencana_tindak_lanjut'];
-    if (!in_array($kolom, $kolomDiizinkan, true)) {
-        return [];
-    }
-
-    $sql = "
-        SELECT DISTINCT m.{$kolom}
-        FROM monev_triwulan m
-        INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
-        INNER JOIN kkpr_header h ON h.id = r.id_kkpr
-        WHERE h.tahun = ?
-          AND h.unit_pemilik_risiko LIKE ?
-          AND m.triwulan = ?
-          AND m.{$kolom} IS NOT NULL
-          AND m.{$kolom} <> ''
-        ORDER BY m.{$kolom}
-    ";
-
-    $unitLike = '%' . $unitKerja . '%';
-    $stmt = $db->prepare($sql);
-    $stmt->bind_param('ssi', $tahun, $unitLike, $triwulan);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $values = [];
-    while ($row = $result->fetch_row()) {
-        $values[] = (string)$row[0];
-    }
-    $stmt->close();
-    return $values;
-}
-
-/**
- * Hitung statistik tren risiko dari rows satu unit kerja.
- * Hanya rows dengan akhir_nilai tidak NULL yang dihitung (memiliki data monev).
- *
- * @param array[] $rows
- * @return array{turun:int,tetap:int,naik:int,tinggi:int,total_monev:int}
- */
-function laporanHitungStatistik(array $rows): array {
-    $turun      = 0;
-    $tetap      = 0;
-    $naik       = 0;
-    $tinggi     = 0;
-    $totalMonev = 0;
-
-    foreach ($rows as $row) {
-        // Risiko tanpa data monev (LEFT JOIN menghasilkan NULL) dikecualikan
-        if ($row['akhir_nilai'] === null) {
-            continue;
-        }
-
-        $totalMonev++;
-        $awalNilai  = (int)$row['awal_nilai'];
-        $akhirNilai = (int)$row['akhir_nilai'];
-
-        if ($akhirNilai < $awalNilai) {
-            $turun++;
-        } elseif ($akhirNilai === $awalNilai) {
-            $tetap++;
+        $prevTriwulan = $triwulan - 1;
+        if ($prefix !== '') {
+            $prefixPattern = $prefix . '.%';
+            if ($triwulan > 1) {
+                $sql = "
+                    SELECT
+                        r.kode_risiko,
+                        r.nama_risiko,
+                        COALESCE(mp.pantau_p, r.probabilitas)         AS awal_p,
+                        COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
+                        COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
+                        COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
+                        m.upaya_pengendalian,
+                        m.pantau_p            AS akhir_p,
+                        m.pantau_d            AS akhir_d,
+                        m.pantau_nilai        AS akhir_nilai,
+                        m.pantau_tingkat      AS akhir_tingkat,
+                        m.kendala,
+                        m.rencana_tindak_lanjut
+                    FROM kkpr_risiko r
+                    INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                    LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
+                    LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
+                    WHERE h.tahun = ?
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                    ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
+                ";
+                $stmt = $db->prepare($sql);
+                $stmt->bind_param('iissss', $prevTriwulan, $triwulan, $tahun, $prefixPattern, $prefix, $unitLike);
+            } else {
+                $sql = "
+                    SELECT
+                        r.kode_risiko,
+                        r.nama_risiko,
+                        r.probabilitas        AS awal_p,
+                        r.dampak_level        AS awal_d,
+                        r.nilai_risiko        AS awal_nilai,
+                        r.tingkat_risiko      AS awal_tingkat,
+                        m.upaya_pengendalian,
+                        m.pantau_p            AS akhir_p,
+                        m.pantau_d            AS akhir_d,
+                        m.pantau_nilai        AS akhir_nilai,
+                        m.pantau_tingkat      AS akhir_tingkat,
+                        m.kendala,
+                        m.rencana_tindak_lanjut
+                    FROM kkpr_risiko r
+                    INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                    LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
+                    WHERE h.tahun = ?
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                    ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
+                ";
+                $stmt = $db->prepare($sql);
+                $stmt->bind_param('issss', $triwulan, $tahun, $prefixPattern, $prefix, $unitLike);
+            }
         } else {
-            $naik++;
+            if ($triwulan > 1) {
+                $sql = "
+                    SELECT
+                        r.kode_risiko,
+                        r.nama_risiko,
+                        COALESCE(mp.pantau_p, r.probabilitas)         AS awal_p,
+                        COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
+                        COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
+                        COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
+                        m.upaya_pengendalian,
+                        m.pantau_p            AS akhir_p,
+                        m.pantau_d            AS akhir_d,
+                        m.pantau_nilai        AS akhir_nilai,
+                        m.pantau_tingkat      AS akhir_tingkat,
+                        m.kendala,
+                        m.rencana_tindak_lanjut
+                    FROM kkpr_risiko r
+                    INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                    LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
+                    LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
+                    WHERE h.tahun = ?
+                      AND h.unit_pemilik_risiko LIKE ?
+                    ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
+                ";
+                $stmt = $db->prepare($sql);
+                $stmt->bind_param('iiss', $prevTriwulan, $triwulan, $tahun, $unitLike);
+            } else {
+                $sql = "
+                    SELECT
+                        r.kode_risiko,
+                        r.nama_risiko,
+                        r.probabilitas        AS awal_p,
+                        r.dampak_level        AS awal_d,
+                        r.nilai_risiko        AS awal_nilai,
+                        r.tingkat_risiko      AS awal_tingkat,
+                        m.upaya_pengendalian,
+                        m.pantau_p            AS akhir_p,
+                        m.pantau_d            AS akhir_d,
+                        m.pantau_nilai        AS akhir_nilai,
+                        m.pantau_tingkat      AS akhir_tingkat,
+                        m.kendala,
+                        m.rencana_tindak_lanjut
+                    FROM kkpr_risiko r
+                    INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                    LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
+                    WHERE h.tahun = ?
+                      AND h.unit_pemilik_risiko LIKE ?
+                    ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
+                ";
+                $stmt = $db->prepare($sql);
+                $stmt->bind_param('iss', $triwulan, $tahun, $unitLike);
+            }
         }
 
-        $akhirTingkat = (string)($row['akhir_tingkat'] ?? '');
-        if (in_array($akhirTingkat, ['Tinggi', 'Sangat Tinggi'], true)) {
-            $tinggi++;
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $rows = [];
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
         }
+        $stmt->close();
+        return $rows;
     }
-
-    return [
-        'turun'       => $turun,
-        'tetap'       => $tetap,
-        'naik'        => $naik,
-        'tinggi'      => $tinggi,
-        'total_monev' => $totalMonev,
-    ];
 }
 
-/** Nama bulan dalam bahasa Indonesia (indeks 1-12). */
-function laporanBulanId(): array {
-    return [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+if (!function_exists('laporanGetAggregat')) {
+    function laporanGetAggregat(mysqli $db, string $unitKerja, string $tahun, int $triwulan, string $kolom): array {
+        $kolomDiizinkan = ['kendala', 'rencana_tindak_lanjut'];
+        if (!in_array($kolom, $kolomDiizinkan, true)) {
+            return [];
+        }
+
+        $prefixMap = [
+            'Sub Bagian Administrasi Umum'                          => 'A',
+            'Tim Kerja Program Layanan'                             => 'L',
+            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
+            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
+            'Instalasi'                                             => 'I',
+            'Gratifikasi'                                           => 'G',
+        ];
+
+        $prefix = $prefixMap[$unitKerja] ?? '';
+        $unitLike = '%' . $unitKerja . '%';
+
+        if ($prefix !== '') {
+            $prefixPattern = $prefix . '.%';
+            $sql = "
+                SELECT DISTINCT m.{$kolom}
+                FROM monev_triwulan m
+                INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
+                INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                WHERE h.tahun = ?
+                  AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                  AND m.triwulan = ?
+                  AND m.{$kolom} IS NOT NULL
+                  AND m.{$kolom} <> ''
+                  AND TRIM(m.{$kolom}) <> '-'
+                ORDER BY m.{$kolom}
+            ";
+            $stmt = $db->prepare($sql);
+            $stmt->bind_param('ssssi', $tahun, $prefixPattern, $prefix, $unitLike, $triwulan);
+        } else {
+            $sql = "
+                SELECT DISTINCT m.{$kolom}
+                FROM monev_triwulan m
+                INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
+                INNER JOIN kkpr_header h ON h.id = r.id_kkpr
+                WHERE h.tahun = ?
+                  AND h.unit_pemilik_risiko LIKE ?
+                  AND m.triwulan = ?
+                  AND m.{$kolom} IS NOT NULL
+                  AND m.{$kolom} <> ''
+                  AND TRIM(m.{$kolom}) <> '-'
+                ORDER BY m.{$kolom}
+            ";
+            $stmt = $db->prepare($sql);
+            $stmt->bind_param('ssi', $tahun, $unitLike, $triwulan);
+        }
+
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $values = [];
+        while ($row = $result->fetch_row()) {
+            $val = trim((string)$row[0]);
+            if ($val !== '' && $val !== '-') {
+                $values[] = $val;
+            }
+        }
+        $stmt->close();
+        return $values;
+    }
 }
 
-/**
- * Format tanggal ISO (YYYY-MM-DD) menjadi format Indonesia, mis. "15 Juli 2026".
- * Nilai non-ISO dikembalikan apa adanya agar input lama tetap tampil.
- */
-function laporanFormatTanggal(string $tgl): string {
-    $tgl = trim($tgl);
-    if ($tgl === '') {
+if (!function_exists('laporanHitungStatistik')) {
+    function laporanHitungStatistik(array $rows): array {
+        $turun      = 0;
+        $tetap      = 0;
+        $naik       = 0;
+        $tinggi     = 0;
+        $totalMonev = 0;
+        $levels     = [
+            'Sangat Tinggi' => 0,
+            'Tinggi'        => 0,
+            'Sedang'        => 0,
+            'Rendah'        => 0,
+            'Sangat Rendah' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            if ($row['akhir_nilai'] === null) {
+                continue;
+            }
+
+            $totalMonev++;
+            $awalNilai  = (int)round((float)$row['awal_nilai']);
+            $akhirNilai = (int)round((float)$row['akhir_nilai']);
+
+            if ($akhirNilai < $awalNilai) {
+                $turun++;
+            } elseif ($akhirNilai === $awalNilai) {
+                $tetap++;
+            } else {
+                $naik++;
+            }
+
+            $akhirTingkat = trim((string)($row['akhir_tingkat'] ?? ''));
+            if (isset($levels[$akhirTingkat])) {
+                $levels[$akhirTingkat]++;
+            }
+            if (in_array($akhirTingkat, ['Tinggi', 'Sangat Tinggi'], true)) {
+                $tinggi++;
+            }
+        }
+
+        return [
+            'turun'         => $turun,
+            'tetap'         => $tetap,
+            'naik'          => $naik,
+            'tinggi'        => $tinggi,
+            'total_monev'   => $totalMonev,
+            'levels'        => $levels,
+            'sangat_tinggi' => $levels['Sangat Tinggi'],
+            'tinggi_level'  => $levels['Tinggi'],
+            'sedang'        => $levels['Sedang'],
+            'rendah'        => $levels['Rendah'],
+            'sangat_rendah' => $levels['Sangat Rendah'],
+        ];
+    }
+}
+
+if (!function_exists('laporanBulanId')) {
+    function laporanBulanId(): array {
+        return [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    }
+}
+
+if (!function_exists('laporanFormatTanggal')) {
+    function laporanFormatTanggal(string $tgl): string {
+        $tgl = trim($tgl);
+        if ($tgl === '') {
+            return '';
+        }
+        $dt = DateTime::createFromFormat('Y-m-d', $tgl);
+        if (!$dt || $dt->format('Y-m-d') !== $tgl) {
+            return $tgl;
+        }
+        return (int)$dt->format('j') . ' ' . laporanBulanId()[(int)$dt->format('n')] . ' ' . $dt->format('Y');
+    }
+}
+
+if (!function_exists('laporanTanggalKeIso')) {
+    function laporanTanggalKeIso(string $tgl): string {
+        $tgl = trim($tgl);
+        if ($tgl === '') {
+            return '';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl)) {
+            return $tgl;
+        }
+        $tgl     = preg_replace('/^\s*Salatiga\s*,?\s*/i', '', $tgl);
+        $bulanId = array_flip(array_map('strtolower', laporanBulanId()));
+        if (preg_match('/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/u', trim($tgl), $m)) {
+            $key = $bulanId[strtolower($m[2])] ?? null;
+            if ($key !== null) {
+                return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$key, (int)$m[1]);
+            }
+        }
         return '';
     }
-    $dt = DateTime::createFromFormat('Y-m-d', $tgl);
-    if (!$dt || $dt->format('Y-m-d') !== $tgl) {
-        return $tgl;
-    }
-    return (int)$dt->format('j') . ' ' . laporanBulanId()[(int)$dt->format('n')] . ' ' . $dt->format('Y');
 }
 
-/**
- * Ubah berbagai format tanggal (ISO atau "15 Juli 2026", boleh berawalan
- * "Salatiga,") menjadi ISO (YYYY-MM-DD) untuk value <input type="date">.
- * Mengembalikan string kosong bila tidak dapat dikenali.
- */
-function laporanTanggalKeIso(string $tgl): string {
-    $tgl = trim($tgl);
-    if ($tgl === '') {
-        return '';
+// ── POST: Simpan Draft Laporan (Edit Online) ───────────────────
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'save_draft') {
+    requireLogin();
+    requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
+
+    header('Content-Type: application/json; charset=UTF-8');
+    $jsonOut = function (int $code, string $msg, array $extra = []) {
+        http_response_code($code);
+        echo json_encode(array_merge(['ok' => ($code === 200), 'message' => $msg], $extra), JSON_UNESCAPED_UNICODE);
+        exit;
+    };
+
+    if (!verifyCsrf()) {
+        $jsonOut(403, 'Token keamanan CSRF tidak valid.');
     }
-    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl)) {
-        return $tgl;
+
+    $rawHtml = (string)($_POST['html'] ?? '');
+    if (strlen(trim($rawHtml)) < 50) {
+        $jsonOut(400, 'Konten laporan kosong atau tidak valid.');
     }
-    $tgl     = preg_replace('/^\s*Salatiga\s*,?\s*/i', '', $tgl);
-    $bulanId = array_flip(array_map('strtolower', laporanBulanId()));
-    if (preg_match('/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/u', trim($tgl), $m)) {
-        $key = $bulanId[strtolower($m[2])] ?? null;
-        if ($key !== null) {
-            return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$key, (int)$m[1]);
-        }
+    if (strlen($rawHtml) > 10 * 1024 * 1024) {
+        $jsonOut(413, 'Konten laporan terlalu besar (maksimal 10MB).');
     }
-    return '';
+
+    $postTahun    = trim((string)($_POST['tahun'] ?? $tahun));
+    $postTriwulan = (int)($_POST['triwulan'] ?? $triwulan);
+    if (!preg_match('/^\d{4}$/', $postTahun) || $postTriwulan < 1 || $postTriwulan > 4) {
+        $jsonOut(400, 'Parameter tahun atau triwulan tidak valid.');
+    }
+
+    $cleanHtml = laporanSanitizeDraftHtml($rawHtml);
+
+    $db = getDB();
+    laporanEnsureDraftTable($db);
+
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $userIdVal = $userId > 0 ? $userId : null;
+
+    $stmt = $db->prepare("INSERT INTO laporan_monev_draft (tahun, triwulan, konten_html, user_id, updated_at) 
+                          VALUES (?, ?, ?, ?, NOW()) 
+                          ON DUPLICATE KEY UPDATE konten_html = VALUES(konten_html), user_id = VALUES(user_id), updated_at = NOW()");
+    if (!$stmt) {
+        error_log('[manris] Prepare save_draft failed: ' . $db->error);
+        $jsonOut(500, 'Gagal menyiapkan penyimpanan data: ' . $db->error);
+    }
+    $stmt->bind_param('sisi', $postTahun, $postTriwulan, $cleanHtml, $userIdVal);
+    if (!$stmt->execute()) {
+        error_log('[manris] Execute save_draft failed: ' . $stmt->error);
+        $stmt->close();
+        $jsonOut(500, 'Gagal menyimpan laporan ke database: ' . $stmt->error);
+    }
+    $stmt->close();
+
+    $waktuSimpan = date('d/m/Y H:i:s');
+    $jsonOut(200, 'Laporan berhasil disimpan ke database.', [
+        'updated_at' => $waktuSimpan,
+        'tahun'      => $postTahun,
+        'triwulan'   => $postTriwulan,
+    ]);
+}
+
+// ── POST: Reset Draft Laporan ke Data Awal ─────────────────────
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'reset_draft') {
+    requireLogin();
+    requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
+
+    header('Content-Type: application/json; charset=UTF-8');
+    $jsonOut = function (int $code, string $msg) {
+        http_response_code($code);
+        echo json_encode(['ok' => ($code === 200), 'message' => $msg], JSON_UNESCAPED_UNICODE);
+        exit;
+    };
+
+    if (!verifyCsrf()) {
+        $jsonOut(403, 'Token keamanan CSRF tidak valid.');
+    }
+
+    $postTahun    = trim((string)($_POST['tahun'] ?? $tahun));
+    $postTriwulan = (int)($_POST['triwulan'] ?? $triwulan);
+
+    $db = getDB();
+    laporanEnsureDraftTable($db);
+
+    $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ?");
+    if ($stmt) {
+        $stmt->bind_param('si', $postTahun, $postTriwulan);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $jsonOut(200, 'Laporan berhasil dikembalikan ke data awal sistem.');
 }
 
 // ── POST: Unduh .docx dari konten hasil Edit Online ─────────────
@@ -282,8 +663,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
     if (strlen($editedHtml) < 50) {
         $jsonOut(400, 'Konten dokumen kosong atau tidak valid.');
     }
-    if (strlen($editedHtml) > 5 * 1024 * 1024) {
-        $jsonOut(413, 'Konten dokumen terlalu besar (maksimal 5MB).');
+    if (strlen($editedHtml) > 10 * 1024 * 1024) {
+        $jsonOut(413, 'Konten dokumen terlalu besar (maksimal 10MB).');
     }
 
     require_once __DIR__ . '/laporan_monev_html_to_docx.php';
@@ -321,6 +702,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 if ($isGenerate && $format === 'docx') {
     require_once __DIR__ . '/../vendor/autoload.php';
 
+    // Cek apakah ada draft yang tersimpan di DB
+    $db = getDB();
+    laporanEnsureDraftTable($db);
+    $draftRow = null;
+    $stmt = $db->prepare("SELECT konten_html FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param('si', $tahun, $triwulan);
+        $stmt->execute();
+        $draftRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+    }
+
+    if (!empty($draftRow['konten_html'])) {
+        // Konversi dari draft tersimpan via laporanMonevHtmlToDocx
+        require_once __DIR__ . '/laporan_monev_html_to_docx.php';
+        $phpWord = laporanMonevHtmlToDocx($draftRow['konten_html']);
+
+        $prevDisplay = ini_set('display_errors', '0');
+        $prevErrLvl  = error_reporting(E_ALL & ~E_DEPRECATED);
+        ob_start();
+        \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'Word2007')->save('php://output');
+        $docxBinary = ob_get_clean();
+        if ($prevDisplay !== false) {
+            ini_set('display_errors', $prevDisplay);
+        }
+        error_reporting($prevErrLvl);
+
+        $triwulanLabel = ['I', 'II', 'III', 'IV'][$triwulan - 1];
+        $namaFile = 'Laporan_Monev_TW' . $triwulanLabel . '_' . $tahun . '.docx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        header('Content-Disposition: attachment; filename="' . $namaFile . '"');
+        header('Content-Length: ' . strlen($docxBinary));
+        header('Cache-Control: max-age=0');
+        header('Pragma: public');
+        echo $docxBinary;
+        exit;
+    }
+
     $triwulanLabel = ['I', 'II', 'III', 'IV'][$triwulan - 1];
 
     // Warna sel tingkat risiko (tanpa "#", format hex Word)
@@ -350,7 +769,8 @@ if ($isGenerate && $format === 'docx') {
     // Gaya paragraf yang dipakai berulang
     // Font: isi Arial 11, judul/heading Arial 12 bold
     $pCenter   = ['alignment' => 'center'];
-    $pJustify  = ['alignment' => 'both', 'spaceAfter' => 120];
+    $pJustify  = ['alignment' => 'both', 'indent' => ['firstLine' => 720], 'spaceAfter' => 120];
+    $pNoIndent = ['alignment' => 'both', 'spaceAfter' => 120];
     $pHeading  = ['alignment' => 'center', 'spaceBefore' => 240, 'spaceAfter' => 240];
     $fBold     = ['bold' => true];
     $fTitle    = ['bold' => true, 'size' => 12];   // judul BAB, cover, pengesahan
@@ -368,15 +788,16 @@ if ($isGenerate && $format === 'docx') {
     ]);
 
     // ══ HALAMAN 1: COVER ══════════════════════════════════════
-    $logoPath = __DIR__ . '/../assets/img/logo.png';
-    if (is_file($logoPath)) {
-        $section->addImage($logoPath, ['width' => 90, 'height' => 90, 'alignment' => 'center']);
-    }
-    $section->addTextBreak(4);
+    $section->addTextBreak(3);
     $section->addText('LAPORAN MONITORING DAN EVALUASI MANAJEMEN RISIKO', $fTitle, $pCenter);
     $section->addText('BALAI BESAR LABORATORIUM KESEHATAN LINGKUNGAN', $fTitle, $pCenter);
     $section->addTextBreak(2);
     $section->addText('TRIWULAN ' . $triwulanLabel . ' TAHUN ' . $tahun, null, $pCenter);
+    $section->addTextBreak(3);
+    $logoPath = __DIR__ . '/../assets/img/logo.png';
+    if (is_file($logoPath)) {
+        $section->addImage($logoPath, ['width' => 100, 'height' => 100, 'alignment' => 'center']);
+    }
     $section->addPageBreak();
 
     // ══ HALAMAN 2: LEMBAR PENGESAHAN ══════════════════════════
@@ -395,12 +816,12 @@ if ($isGenerate && $format === 'docx') {
     $tabelPetugas->addRow();
     $tabelPetugas->addCell(3000)->addText('Koordinator dan Verifikator', null, ['spaceAfter' => 60]);
     $tabelPetugas->addCell(400)->addText(':', null, ['spaceAfter' => 60]);
-    $tabelPetugas->addCell(5500)->addText($koordinator !== '' ? $koordinator : '_________________________', null, ['spaceAfter' => 60]);
+    $tabelPetugas->addCell(5500)->addText($koordinator !== '' ? $koordinator : 'M. Edi Royandi, SKM, MPH', null, ['spaceAfter' => 60]);
 
     $tabelPetugas->addRow();
     $tabelPetugas->addCell(3000)->addText('Penulis', null, ['spaceAfter' => 60]);
     $tabelPetugas->addCell(400)->addText(':', null, ['spaceAfter' => 60]);
-    $tabelPetugas->addCell(5500)->addText($penulis !== '' ? $penulis : '_________________________', null, ['spaceAfter' => 60]);
+    $tabelPetugas->addCell(5500)->addText($penulis !== '' ? $penulis : 'Bramadita Kunni Fauziyyah', null, ['spaceAfter' => 60]);
 
     $section->addTextBreak(3);
 
@@ -409,7 +830,7 @@ if ($isGenerate && $format === 'docx') {
         $tglFmt  = laporanFormatTanggal($tanggal);
         $tglWord = (stripos($tglFmt, 'Salatiga') === 0) ? $tglFmt : ('Salatiga, ' . $tglFmt);
     } else {
-        $tglWord = 'Salatiga, _________________________';
+        $tglWord = 'Salatiga, ' . laporanFormatTanggal(date('Y-m-d'));
     }
 
     $section->addText($tglWord, null, $pCenter);
@@ -418,8 +839,8 @@ if ($isGenerate && $format === 'docx') {
 
     $section->addTextBreak(4);
 
-    $section->addText($namaKepala !== '' ? $namaKepala : '_________________________', null, $pCenter);
-    $section->addText($nipKepala !== '' ? 'NIP. ' . $nipKepala : 'NIP. _________________________', $fSmallNip, $pCenter);
+    $section->addText($namaKepala !== '' ? $namaKepala : 'Akhmad Saikhu, SKM, M.Sc.PH', null, $pCenter);
+    $section->addText($nipKepala !== '' ? 'NIP. ' . $nipKepala : 'NIP. 196805251992031004', $fSmallNip, $pCenter);
 
     $section->addPageBreak();
 
@@ -427,33 +848,36 @@ if ($isGenerate && $format === 'docx') {
     $section->addText('BAB I', $fTitle, $pHeading);
     $section->addText('PENDAHULUAN', $fTitle, $pHeading);
 
-    $section->addText('1.A. Latar Belakang', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
-    $section->addText('Manajemen risiko merupakan bagian integral dari Sistem Pengendalian Intern Pemerintah (SPIP) yang wajib diterapkan di seluruh lingkungan pemerintah, termasuk Kementerian Kesehatan. Penerapan manajemen risiko diarahkan untuk mengidentifikasi, menganalisis, mengevaluasi, dan menangani risiko yang dapat mengganggu pencapaian tujuan organisasi. Agar penerapan manajemen risiko berjalan efektif, diperlukan kegiatan monitoring dan evaluasi (monev) yang dilaksanakan secara berkala untuk memastikan bahwa upaya pengendalian risiko yang telah direncanakan benar-benar dijalankan dan memberikan hasil yang diharapkan.', null, $pJustify);
-    $section->addText('Laporan ini menyajikan hasil monitoring dan evaluasi pelaksanaan pengendalian risiko pada Balai Besar Laboratorium Kesehatan Lingkungan untuk periode Triwulan ' . $triwulanLabel . ' Tahun ' . $tahun . '. Laporan mencakup kondisi risiko awal, upaya pengendalian yang dilaksanakan, kondisi risiko akhir periode, hambatan dan kendala yang dihadapi, serta rencana tindak lanjut dari seluruh unit kerja di lingkungan Balai Besar Laboratorium Kesehatan Lingkungan.', null, $pJustify);
+    $section->addText('A. Latar Belakang', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+    $section->addText('Risiko adalah kemungkinan terjadinya suatu peristiwa yang berdampak negatif terhadap pencapaian sasaran organisasi. Manajemen Risiko merupakan proses yang proaktif dan berkelanjutan meliputi identifikasi, analisis, evaluasi, pengendalian, informasi komunikasi, pemantauan, dan pelaporan risiko, termasuk berbagai strategi yang dijalankan untuk mengelola Risiko dan potensinya. mengantisipasi dan menangani segala bentuk Risiko secara efektif dan efisien.', null, $pJustify);
+    $section->addText('Penerapan manajemen risiko bertujuan untuk mengidentifikasi dan memitigasi sumber-sumber risiko yang berpotensi menghambat pencapaian tujuan organisasi. Selain itu, manajemen risiko juga menjadi dasar dalam pengambilan keputusan dan perencanaan strategis, serta berkontribusi dalam peningkatan kinerja organisasi. Melalui penerapan manajemen risiko yang efektif, diharapkan organisasi mampu menjaga kesinambungan pelayanan kepada pemangku kepentingan, meningkatkan efisiensi dan efektivitas pelaksanaan kegiatan, serta menghindari terjadinya pemborosan sumber daya.', null, $pJustify);
+    $section->addText('Sebagai bagian dari Sistem Pengendalian Intern Pemerintah (SPIP), penerapan manajemen risiko di lingkungan instansi pemerintah telah diatur dalam Peraturan Pemerintah Nomor 60 Tahun 2008. Dalam peraturan tersebut, penilaian risiko merupakan salah satu unsur penting yang wajib dilaksanakan oleh pimpinan instansi pemerintah, yang meliputi tahapan identifikasi risiko dan analisis risiko. Selain itu, Kementerian Kesehatan Republik Indonesia juga telah menetapkan Peraturan Menteri Kesehatan Nomor 25 Tahun 2019 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan sebagai pedoman dalam pelaksanaan manajemen risiko.', null, $pJustify);
+    $section->addText('Sehubungan dengan hal tersebut, diperlukan kegiatan monitoring dan evaluasi (Monev) pada pelaksanaan manajemen risiko di Balai Besar Laboratorium Kesehatan Lingkungan sebagai upaya untuk menilai efektivitas penerapan manajemen risiko yang telah dilaksanakan, memastikan kesesuaian dengan ketentuan yang berlaku, serta mengidentifikasi perbaikan yang diperlukan guna mendukung pencapaian tujuan organisasi secara optimal.', null, $pJustify);
 
-    $section->addText('1.B. Dasar Hukum', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+    $section->addText('B. Dasar Hukum', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
     $dasarHukum = [
-        'Peraturan Pemerintah Nomor 60 Tahun 2008 tentang Sistem Pengendalian Intern Pemerintah (SPIP).',
-        'Peraturan Kepala BPKP Nomor 4 Tahun 2016 tentang Pedoman Penilaian dan Strategi Peningkatan Maturitas Sistem Pengendalian Intern Pemerintah.',
-        'Peraturan Menteri Kesehatan Nomor 25 Tahun 2019 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan.',
-        'Peraturan Menteri Pendayagunaan Aparatur Negara dan Reformasi Birokrasi Nomor 5 Tahun 2020 tentang Road Map Reformasi Birokrasi 2020-2024.',
-        'Keputusan Menteri Kesehatan Nomor HK.01.07/MENKES/1160/2022 tentang Pedoman Manajemen Risiko Kementerian Kesehatan.',
-        'ISO 31000:2018 - Risk Management Guidelines.',
-        'Standar Nasional Indonesia SNI ISO 31000:2018 tentang Manajemen Risiko - Panduan.',
-        'Peraturan Pemerintah Nomor 12 Tahun 2019 tentang Pengelolaan Keuangan Daerah.',
-        'Rencana Strategis Balai Besar Laboratorium Kesehatan Lingkungan tahun ' . $tahun . '.',
+        'Undang-Undang Nomor 1 Tahun 2004 tentang Perbendaharaan Negara.',
+        'Peraturan Pemerintah Nomor 60 tahun 2008 tentang Sistem Pengendalian Intern Pemerintah.',
+        'Peraturan Presiden Nomor 140 Tahun 2024 tentang Organisasi Kementerian Negara.',
+        'Peraturan Menteri Keuangan Nomor 17/PMK.09/2019 tentang Pedoman Penerapan, Penilaian dan Reviu Pengendalian Intern Atas Pelaporan Keuangan Pemerintah Pusat (PIPK).',
+        'Peraturan Kepala BPKP Nomor 5 tahun 2021 tentang Penilaian Maturitas Penyelenggaraan Sistem Pengendalian Intern Pemerintah Terintegrasi pada Kementerian/Lembaga /Pemerintah Daerah.',
+        'Peraturan Menteri Kesehatan Nomor 84 tahun 2019 tentang Tata Kelola Pengawasan Intern di Lingkungan Kementerian Kesehatan.',
+        'Keputusan Menteri Kesehatan Nomor HK.01.07/MENKES/1354/2024 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan.',
+        'Peraturan Menteri Kesehatan Nomor 21 Tahun 2024 tentang Organisasi dan Tata Kerja Kementerian Kesehatan.',
+        'Peraturan Menteri Kesehatan Nomor 27 Tahun 2023 tentang Organisasi dan tata Kerja Balai Besar Laboratorium Kesehatan Lingkungan.',
     ];
     foreach ($dasarHukum as $i => $butir) {
         $section->addText(($i + 1) . '. ' . $butir, null, ['alignment' => 'both', 'indent' => 360, 'hanging' => 360, 'spaceAfter' => 40]);
     }
 
-    $section->addText('1.C. Tujuan', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+    $section->addText('C. Tujuan', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+    $section->addText('Monitoring dan evaluasi manajemen risiko di Balai Besar Laboratorium Kesehatan Lingkungan (BBLKL) Salatiga bertujuan:', null, $pJustify);
     $tujuan = [
-        'Memantau pelaksanaan pengendalian risiko yang telah direncanakan pada setiap unit kerja.',
-        'Mengevaluasi efektivitas upaya pengendalian risiko berdasarkan perubahan nilai dan tingkat risiko.',
-        'Mengidentifikasi hambatan dan kendala dalam pelaksanaan pengendalian risiko.',
-        'Merumuskan rencana tindak lanjut untuk meningkatkan efektivitas pengendalian risiko pada periode berikutnya.',
-        'Menyediakan bahan pengambilan keputusan bagi pimpinan terkait pengelolaan risiko organisasi.',
+        'Menilai efektivitas penerapan manajemen risiko di lingkungan organisasi.',
+        'Memastikan pelaksanaan manajemen risiko telah sesuai dengan ketentuan dan peraturan yang berlaku.',
+        'Mengidentifikasi risiko-risiko yang muncul serta mengevaluasi upaya mitigasi yang telah dilakukan.',
+        'Mengidentifikasi kendala dan permasalahan dalam penerapan manajemen risiko sebagai bahan perbaikan berkelanjutan.',
+        'Memberikan rekomendasi perbaikan guna meningkatkan kualitas penerapan manajemen risiko pada periode selanjutnya.',
     ];
     foreach ($tujuan as $i => $butir) {
         $section->addText(($i + 1) . '. ' . $butir, null, ['alignment' => 'both', 'indent' => 360, 'hanging' => 360, 'spaceAfter' => 40]);
@@ -469,13 +893,16 @@ if ($isGenerate && $format === 'docx') {
 
     // Lebar kolom (twips): No, Kode, Pernyataan, P, D, Nilai, Tingkat, Upaya, P, D, Nilai, Tingkat
     $wNo = 350; $wKode = 850; $wNama = 2000; $wP = 280; $wD = 280; $wNilai = 400; $wTingkat = 950; $wUpaya = 1700;
+    $unitHuruf = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $rows = laporanGetDataUnit($db, $unitKerja, $tahun, $triwulan);
         $allUnitData[$unitIdx] = $rows;
         $unitNo = $unitIdx + 1;
+        $huruf  = $unitHuruf[$unitIdx] ?? (string)$unitNo;
 
-        $section->addText('2.' . $unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 200, 'spaceAfter' => 80]);
+        $section->addText($huruf . '. ' . $unitKerja, $fBold, ['spaceBefore' => 200, 'spaceAfter' => 40]);
+        $section->addText('Tabel ' . $unitNo . '. Hasil Monev Risiko ' . $unitKerja . ' Triwulan ' . $triwulan . ' Tahun ' . $tahun, ['italic' => true, 'size' => 10], ['spaceBefore' => 20, 'spaceAfter' => 80]);
 
         $table = $section->addTable(['borderSize' => 4, 'borderColor' => '000000', 'width' => 100, 'unit' => 'pct', 'cellMargin' => 40]);
 
@@ -483,10 +910,20 @@ if ($isGenerate && $format === 'docx') {
         $table->addRow();
         $table->addCell($wNo,    ['vMerge' => 'restart', 'bgColor' => 'D9E1F2'])->addText('No', $fTableB, $pCenter);
         $table->addCell($wKode,  ['vMerge' => 'restart', 'bgColor' => 'D9E1F2'])->addText('Kode Risiko', $fTableB, $pCenter);
+        $romawiArr = ['I', 'II', 'III', 'IV'];
+        $kolomKiriJudul  = ($triwulan > 1) ? 'KONDISI AKHIR' : 'KONDISI AWAL';
+        $kolomKiriTw     = ($triwulan > 1) ? '(TW ' . ($romawiArr[$triwulan - 2] ?? 'I') . ')' : '(TW I)';
+        $kolomKananJudul = 'KONDISI AKHIR';
+        $kolomKananTw    = '(TW ' . ($romawiArr[$triwulan - 1] ?? 'I') . ')';
+
         $table->addCell($wNama,  ['vMerge' => 'restart', 'bgColor' => 'D9E1F2'])->addText('Pernyataan Risiko', $fTableB, $pCenter);
-        $table->addCell($wP + $wD + $wNilai + $wTingkat, ['gridSpan' => 4, 'bgColor' => 'D9E1F2'])->addText('KONDISI AKHIR TRIWULAN I', $fTableB, $pCenter);
+        $cellAwal = $table->addCell($wP + $wD + $wNilai + $wTingkat, ['gridSpan' => 4, 'bgColor' => 'D9E1F2']);
+        $cellAwal->addText($kolomKiriJudul, $fTableB, $pCenter);
+        $cellAwal->addText($kolomKiriTw, $fTableB, $pCenter);
         $table->addCell($wUpaya, ['vMerge' => 'restart', 'bgColor' => 'D9E1F2'])->addText('Upaya Pengendalian', $fTableB, $pCenter);
-        $table->addCell($wP + $wD + $wNilai + $wTingkat, ['gridSpan' => 4, 'bgColor' => 'D9E1F2'])->addText('KONDISI AKHIR TRIWULAN ' . $triwulanLabel, $fTableB, $pCenter);
+        $cellAkhir = $table->addCell($wP + $wD + $wNilai + $wTingkat, ['gridSpan' => 4, 'bgColor' => 'D9E1F2']);
+        $cellAkhir->addText($kolomKananJudul, $fTableB, $pCenter);
+        $cellAkhir->addText($kolomKananTw, $fTableB, $pCenter);
 
         // Header baris 2 (kelanjutan vMerge)
         $table->addRow();
@@ -515,7 +952,7 @@ if ($isGenerate && $format === 'docx') {
                 $awalFg   = $fgMap[$awalTingkat]  ?? '374151';
                 $akhirBg  = ($row['akhir_nilai'] !== null) ? ($bgMap[$akhirTingkat] ?? 'F3F4F6') : 'F3F4F6';
                 $akhirFg  = ($row['akhir_nilai'] !== null) ? ($fgMap[$akhirTingkat] ?? '374151') : '374151';
-                $upayaTxt = (!empty($row['upaya_pengendalian'])) ? (string)$row['upaya_pengendalian'] : '-';
+                $upayaLines = laporanFormatUpayaLines($row['upaya_pengendalian'] ?? null);
 
                 $table->addRow();
                 $table->addCell($wNo)->addText((string)($rowNo + 1), $fTable, $pCenter);
@@ -523,12 +960,15 @@ if ($isGenerate && $format === 'docx') {
                 $table->addCell($wNama)->addText((string)($row['nama_risiko'] ?? ''), $fTable);
                 $table->addCell($wP)->addText($row['awal_p']     !== null ? (string)$row['awal_p']     : '-', $fTable, $pCenter);
                 $table->addCell($wD)->addText($row['awal_d']     !== null ? (string)$row['awal_d']     : '-', $fTable, $pCenter);
-                $table->addCell($wNilai)->addText($row['awal_nilai'] !== null ? (string)$row['awal_nilai'] : '-', $fTable, $pCenter);
+                $table->addCell($wNilai)->addText($row['awal_nilai'] !== null ? (string)round((float)$row['awal_nilai']) : '-', $fTable, $pCenter);
                 $table->addCell($wTingkat, ['bgColor' => $awalBg])->addText($awalTingkat !== '' ? $awalTingkat : '-', ['size' => 9, 'bold' => true, 'color' => $awalFg], $pCenter);
-                $table->addCell($wUpaya)->addText($upayaTxt, $fTable);
+                $cellUpaya = $table->addCell($wUpaya);
+                foreach ($upayaLines as $upayaLine) {
+                    $cellUpaya->addText($upayaLine, $fTable, ['spaceBefore' => 0, 'spaceAfter' => 20]);
+                }
                 $table->addCell($wP)->addText($row['akhir_p']     !== null ? (string)$row['akhir_p']     : '-', $fTable, $pCenter);
                 $table->addCell($wD)->addText($row['akhir_d']     !== null ? (string)$row['akhir_d']     : '-', $fTable, $pCenter);
-                $table->addCell($wNilai)->addText($row['akhir_nilai'] !== null ? (string)$row['akhir_nilai'] : '-', $fTable, $pCenter);
+                $table->addCell($wNilai)->addText($row['akhir_nilai'] !== null ? (string)round((float)$row['akhir_nilai']) : '-', $fTable, $pCenter);
                 $table->addCell($wTingkat, ['bgColor' => $akhirBg])->addText(($row['akhir_nilai'] !== null && $akhirTingkat !== '') ? $akhirTingkat : '-', ['size' => 9, 'bold' => true, 'color' => $akhirFg], $pCenter);
             }
         }
@@ -536,21 +976,24 @@ if ($isGenerate && $format === 'docx') {
     }
     $section->addPageBreak();
 
-    // ══ BAB III: HAMBATAN DAN KENDALA ═════════════════════════
+    // ══ BAB III: HAMBATAN YANG DITEMUI ════════════════════════
     $section->addText('BAB III', $fTitle, $pHeading);
-    $section->addText('HAMBATAN DAN KENDALA', $fTitle, $pHeading);
+    $section->addText('HAMBATAN YANG DITEMUI', $fTitle, $pHeading);
+    $section->addText('Dalam pelaksanaan pengendalian risiko pada Triwulan ' . $triwulanLabel . ' Tahun ' . $tahun . ', terdapat beberapa hambatan yang masih dihadapi oleh unit kerja, antara lain:', null, $pJustify);
 
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
-        $unitNo = $unitIdx + 1;
-        $kendalaList = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
+        $unitNo      = $unitIdx + 1;
+        $rawKendala  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
+        $kendalaList = laporanPecahItemDaftar($rawKendala);
 
-        $section->addText('3.' . $unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
         if (empty($kendalaList)) {
             $section->addText('Tidak ditemukan kendala dalam pelaksanaan kegiatan.', null, $pJustify);
         } else {
             $section->addText('Hambatan yang ditemui meliputi:', null, $pJustify);
             foreach ($kendalaList as $i => $kendala) {
-                $section->addText(($i + 1) . '. ' . $kendala, null, ['alignment' => 'both', 'indent' => 360, 'hanging' => 360, 'spaceAfter' => 40]);
+                $prefix = laporanFormatLetterPrefix($i);
+                $section->addText($prefix . $kendala, null, ['alignment' => 'both', 'indent' => 280, 'hanging' => 280, 'spaceAfter' => 40]);
             }
         }
     }
@@ -560,22 +1003,22 @@ if ($isGenerate && $format === 'docx') {
     $section->addText('BAB IV', $fTitle, $pHeading);
     $section->addText('PENUTUP', $fTitle, $pHeading);
 
-    $section->addText('A. Kesimpulan', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+    $section->addText('A. KESIMPULAN', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $unitNo = $unitIdx + 1;
         $stat   = laporanHitungStatistik($allUnitData[$unitIdx] ?? []);
 
-        $section->addText('4.A.' . $unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
         if ($stat['total_monev'] === 0) {
             $section->addText('Belum terdapat data monitoring dan evaluasi untuk unit kerja ini pada periode yang dipilih.', null, $pJustify);
         } else {
-            $section->addText('Berdasarkan hasil monitoring dan evaluasi triwulan ' . $triwulanLabel . ' tahun ' . $tahun . ', diperoleh kesimpulan sebagai berikut:', null, $pJustify);
-            $butirHuruf = ['a', 'b', 'c', 'd'];
+            $butirHuruf = ['a', 'b', 'c', 'd', 'e'];
             $butirIsi = [
-                'Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak ' . (int)$stat['turun'] . ' risiko.',
-                'Jumlah risiko dengan tingkat risiko tetap sebanyak ' . (int)$stat['tetap'] . ' risiko.',
-                'Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak ' . (int)$stat['naik'] . ' risiko.',
-                'Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi sebanyak ' . (int)$stat['tinggi'] . ' risiko.',
+                'Jumlah risiko dengan tingkat risiko “Sangat Tinggi” sebanyak ' . (int)$stat['sangat_tinggi'] . ' risiko',
+                'Jumlah risiko dengan tingkat risiko “Tinggi” sebanyak ' . (int)$stat['tinggi_level'] . ' risiko',
+                'Jumlah risiko dengan tingkat risiko “Sedang” sebanyak ' . (int)$stat['sedang'] . ' risiko',
+                'Jumlah risiko dengan tingkat risiko “Rendah” sebanyak ' . (int)$stat['rendah'] . ' risiko',
+                'Jumlah risiko dengan tingkat risiko “Sangat Rendah” sebanyak ' . (int)$stat['sangat_rendah'] . ' risiko',
             ];
             foreach ($butirIsi as $i => $butir) {
                 $section->addText($butirHuruf[$i] . '. ' . $butir, null, ['alignment' => 'both', 'indent' => 360, 'hanging' => 360, 'spaceAfter' => 40]);
@@ -583,18 +1026,22 @@ if ($isGenerate && $format === 'docx') {
         }
     }
 
-    $section->addText('B. Rencana Tindak Lanjut', $fBold, ['spaceBefore' => 200, 'spaceAfter' => 80]);
+    $section->addText('B. RENCANA TINDAK LANJUT', $fBold, ['spaceBefore' => 200, 'spaceAfter' => 80]);
+    $section->addText('Dalam pelaksanaan pengendalian risiko pada Triwulan ' . $triwulanLabel . ' Tahun ' . $tahun . ', telah ditetapkan beberapa rencana tindak lanjut, antara lain:', null, $pJustify);
+
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $unitNo  = $unitIdx + 1;
-        $rtlList = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
+        $rawRtl  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
+        $rtlList = laporanPecahItemDaftar($rawRtl);
 
-        $section->addText('4.B.' . $unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
         if (empty($rtlList)) {
             $section->addText('Rencana Tindak Lanjut yang akan dilakukan adalah melanjutkan upaya pengendalian yang sudah direncanakan.', null, $pJustify);
         } else {
             $section->addText('Rencana tindak lanjut yang akan dilakukan meliputi:', null, $pJustify);
             foreach ($rtlList as $i => $rtl) {
-                $section->addText(($i + 1) . '. ' . $rtl, null, ['alignment' => 'both', 'indent' => 360, 'hanging' => 360, 'spaceAfter' => 40]);
+                $prefix = laporanFormatLetterPrefix($i);
+                $section->addText($prefix . $rtl, null, ['alignment' => 'both', 'indent' => 280, 'hanging' => 280, 'spaceAfter' => 40]);
             }
         }
     }
@@ -627,6 +1074,24 @@ if ($isGenerate) {
     // Mode Generate — output HTML mandiri siap cetak/PDF
     $triwulanLabel = ['I', 'II', 'III', 'IV'][$triwulan - 1];
 
+    // Cek apakah ada draft laporan yang tersimpan di database
+    $db = getDB();
+    laporanEnsureDraftTable($db);
+
+    $draftRow = null;
+    $ignoreDraft = ($_GET['ignore_draft'] ?? '') === '1';
+    if (!$ignoreDraft) {
+        $stmt = $db->prepare("SELECT konten_html, updated_at FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ? LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param('si', $tahun, $triwulan);
+            $stmt->execute();
+            $draftRow = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
+    }
+    $hasSavedDraft  = !empty($draftRow['konten_html']);
+    $draftUpdatedAt = $hasSavedDraft ? $draftRow['updated_at'] : null;
+
     // ── Mode Word (.doc) — kirim header unduhan Word ──────────
     if ($isWordDoc) {
         $namaFile = 'Laporan_Monev_TW' . $triwulanLabel . '_' . $tahun . '.doc';
@@ -642,6 +1107,7 @@ if ($isGenerate) {
   <meta charset="UTF-8">
 <?php if (!$isWordDoc): ?>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <?php else: ?>
   <!--[if gte mso 9]>
   <xml>
@@ -712,16 +1178,21 @@ if ($isGenerate) {
         break-before: page;
     }
 
-    /* ── No-Print Elements ───────────────────────────────────── */
-    .no-print {
-        background: #1e40af;
+    /* ── No-Print Toolbar & Action Buttons ──────────────────── */
+    .no-print.report-toolbar {
+        background: #1e3a8a;
         color: #fff;
-        padding: 12px 0;
+        padding: 10px 16px;
         text-align: center;
         position: sticky;
         top: 0;
-        z-index: 100;
-        box-shadow: 0 2px 8px rgba(0,0,0,.2);
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(0,0,0,.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .no-print .btn-print {
@@ -730,32 +1201,172 @@ if ($isGenerate) {
         gap: 8px;
         background: #fff;
         color: #1e40af;
-        border: none;
+        border: 1px solid rgba(255,255,255,.3);
         border-radius: 6px;
-        padding: 9px 22px;
+        padding: 8px 16px;
         font-family: Arial, sans-serif;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         cursor: pointer;
-        transition: background .15s, color .15s;
+        text-decoration: none;
+        transition: all .15s ease;
     }
 
     .no-print .btn-print:hover {
-        background: #dbeafe;
-        color: #1e3a8a;
+        background: #f1f5f9;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,.15);
     }
 
-    .no-print .btn-print svg,
-    .no-print .btn-print::before {
-        content: '';
+    .no-print .btn-print.btn-primary-edit {
+        background: #2563eb;
+        color: #fff;
+        border-color: #3b82f6;
+    }
+    .no-print .btn-print.btn-primary-edit:hover {
+        background: #1d4ed8;
     }
 
-    .no-print .hint {
-        display: inline-block;
-        margin-left: 16px;
+    .no-print .btn-print.btn-save {
+        background: #16a34a;
+        color: #fff;
+        border-color: #22c55e;
+    }
+    .no-print .btn-print.btn-save:hover {
+        background: #15803d;
+    }
+
+    .no-print .btn-print.btn-done {
+        background: #0d9488;
+        color: #fff;
+        border-color: #14b8a6;
+    }
+    .no-print .btn-print.btn-done:hover {
+        background: #0f766e;
+    }
+
+    .no-print .btn-print.btn-reset {
+        background: #fee2e2;
+        color: #991b1b;
+        border-color: #fca5a5;
+    }
+    .no-print .btn-print.btn-reset:hover {
+        background: #fecaca;
+    }
+
+    .no-print .btn-print.btn-exit {
+        background: #fff;
+        color: #dc2626;
+        border-color: #fca5a5;
+    }
+    .no-print .btn-print.btn-exit:hover {
+        background: #fee2e2;
+        color: #991b1b;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,.15);
+    }
+
+    .no-print .btn-print.btn-pdf {
+        background: #fff;
+        color: #dc2626;
+        border-color: #fca5a5;
+    }
+    .no-print .btn-print.btn-pdf:hover {
+        background: #fee2e2;
+        color: #991b1b;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,.15);
+    }
+
+    .no-print .status-text {
         font-family: Arial, sans-serif;
         font-size: 12px;
-        color: rgba(255,255,255,.8);
+        color: rgba(255,255,255,.95);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: 10px;
+    }
+
+    /* ── Edit Mode Banner & Visual Indicator ─────────────────── */
+    .edit-mode-banner {
+        background: #eff6ff;
+        border-bottom: 1px solid #bfdbfe;
+        color: #1e40af;
+        padding: 9px 20px;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        position: sticky;
+        top: 52px;
+        z-index: 999;
+        box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+
+    #editableWrapper.is-editing {
+        outline: 3px dashed #3b82f6;
+        outline-offset: 8px;
+    }
+    #editableWrapper.is-editing td,
+    #editableWrapper.is-editing th,
+    #editableWrapper.is-editing p,
+    #editableWrapper.is-editing li,
+    #editableWrapper.is-editing h1,
+    #editableWrapper.is-editing h2,
+    #editableWrapper.is-editing h3,
+    #editableWrapper.is-editing h4 {
+        cursor: text;
+    }
+    #editableWrapper.is-editing table td:hover {
+        background-color: rgba(59, 130, 246, 0.08) !important;
+    }
+
+    /* ── Toast Notification ──────────────────────────────────── */
+    .laporan-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #0f172a;
+        color: #fff;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(0,0,0,.25);
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity .25s ease, transform .25s ease;
+        z-index: 99999;
+        pointer-events: none;
+    }
+    .laporan-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .laporan-toast i {
+        color: #4ade80;
+        font-size: 16px;
+    }
+    .laporan-toast.error i {
+        color: #f87171;
+    }
+
+    @media print {
+        .no-print,
+        .edit-mode-banner,
+        .laporan-toast {
+            display: none !important;
+        }
+        #editableWrapper.is-editing {
+            outline: none !important;
+        }
     }
 
     /* ── Headings ────────────────────────────────────────────── */
@@ -796,6 +1407,17 @@ if ($isGenerate) {
     p {
         margin: 0 0 10px 0;
         text-align: justify;
+        text-indent: 1.25cm;
+    }
+
+    .cover p,
+    .pengesahan p,
+    .pengesahan-subjudul p,
+    .tabel-petugas-pengesahan p,
+    p.table-caption,
+    p.no-indent,
+    .no-indent {
+        text-indent: 0;
     }
 
     ol, ul {
@@ -808,25 +1430,69 @@ if ($isGenerate) {
         text-align: justify;
     }
 
+    ol.laporan-sublist,
+    ul.laporan-sublist {
+        list-style: none;
+        padding-left: 0;
+        margin: 6px 0 10px 0;
+    }
+
+    ol.laporan-sublist > li,
+    ul.laporan-sublist > li {
+        list-style: none;
+        margin-bottom: 4px;
+        text-align: justify;
+        padding-left: 36px;
+        text-indent: -36px;
+    }
+
+    ol.laporan-sublist > li .sublist-prefix,
+    ul.laporan-sublist > li .sublist-prefix {
+        display: inline-block;
+        width: 36px;
+        text-indent: 0;
+        font-weight: normal;
+    }
+
+    ol.laporan-sublist.laporan-sublist-letter > li,
+    ul.laporan-sublist.laporan-sublist-letter > li {
+        padding-left: 24px;
+        text-indent: -24px;
+    }
+
+    ol.laporan-sublist.laporan-sublist-letter > li .sublist-prefix,
+    ul.laporan-sublist.laporan-sublist-letter > li .sublist-prefix {
+        width: 24px;
+    }
+
     /* ── Tables ──────────────────────────────────────────────── */
     table.laporan-table {
         border-collapse: collapse;
         width: 100%;
+        max-width: 100%;
+        table-layout: fixed;
         margin-bottom: 16px;
-        font-size: 10pt;
+        font-size: 8.5pt;
+        line-height: 1.25;
     }
 
     table.laporan-table th,
     table.laporan-table td {
         border: 1px solid #000;
-        padding: 5px 7px;
+        padding: 4px 3px;
         vertical-align: middle;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        word-break: normal;
+        box-sizing: border-box;
     }
 
     table.laporan-table th {
         background-color: #d9e1f2;
         font-weight: bold;
         text-align: center;
+        font-size: 8.5pt;
+        line-height: 1.2;
     }
 
     table.laporan-table td.center {
@@ -838,29 +1504,49 @@ if ($isGenerate) {
     }
 
     table.laporan-table .no-col {
-        width: 28px;
+        width: 3.5%;
         text-align: center;
     }
 
     table.laporan-table .kode-col {
-        width: 90px;
+        width: 6.5%;
         text-align: center;
     }
 
+    table.laporan-table .pernyataan-col {
+        width: 25%;
+    }
+
+    table.laporan-table .upaya-col {
+        width: 23%;
+    }
+
+    table.laporan-table th.pernyataan-col,
+    table.laporan-table th.upaya-col {
+        text-align: center;
+    }
+
+    table.laporan-table td.pernyataan-col,
+    table.laporan-table td.upaya-col {
+        text-align: left;
+    }
+
     table.laporan-table .small-col {
-        width: 36px;
+        width: 3.5%;
         text-align: center;
     }
 
     table.laporan-table .nilai-col {
-        width: 42px;
+        width: 4.5%;
         text-align: center;
     }
 
     table.laporan-table .tingkat-col {
-        width: 80px;
+        width: 9%;
         text-align: center;
         font-weight: 600;
+        font-size: 8pt;
+        line-height: 1.15;
     }
 
     /* ── Cover Page ──────────────────────────────────────────── */
@@ -876,9 +1562,15 @@ if ($isGenerate) {
         gap: 20px;
     }
 
+    .cover .logo-wrap {
+        text-align: center;
+        margin-top: 10px;
+    }
+
     .cover .logo-wrap img {
         height: 100px;
         width: auto;
+        display: inline-block;
     }
 
     .cover .doc-label {
@@ -1097,56 +1789,64 @@ if ($isGenerate) {
 
 <?php if (!$isWordDoc): ?>
   <!-- ── Toolbar (hanya tampil di layar) ────────────────────── -->
-  <div class="no-print">
-    <?php if (!$isEdit): ?>
-    <button class="btn-print" onclick="window.print()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
-        <path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2H5zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1z"/>
-      </svg>
-      Cetak / Simpan PDF
-    </button>
-    <?php else: ?>
-    <button class="btn-print" onclick="window.print()">
+  <div class="no-print report-toolbar">
+    <button type="button" class="btn-print" id="btnCetak" onclick="window.print()" title="Cetak Dokumen">
       <i class="fas fa-print" aria-hidden="true"></i>
-      Cetak / Simpan PDF
+      Cetak
     </button>
-    <?php endif; ?>
-    <?php if (!$isEdit): ?>
-    <a class="btn-print" style="text-decoration:none;" href="<?= APP_URL ?>/?page=laporan_monev&amp;generate=1&amp;format=docx&amp;triwulan=<?= $triwulan ?>&amp;tahun=<?= urlencode($tahun) ?>&amp;koordinator=<?= urlencode($koordinator) ?>&amp;penulis=<?= urlencode($penulis) ?>&amp;nama_kepala=<?= urlencode($namaKepala) ?>&amp;nip_kepala=<?= urlencode($nipKepala) ?>&amp;tanggal=<?= urlencode($tanggal) ?>">
+    <button type="button" class="btn-print btn-pdf" id="btnUnduhPdfReport" onclick="window.print()" title="Download / Simpan sebagai file PDF">
+      <i class="fas fa-file-pdf" aria-hidden="true"></i>
+      Unduh PDF (.pdf)
+    </button>
+    <button type="button" class="btn-print" id="btnUnduhWord" title="Unduh Dokumen Word">
       <i class="fas fa-file-word" aria-hidden="true"></i>
       Unduh Word (.docx)
-    </a>
-    <a class="btn-print" style="text-decoration:none;" href="<?= APP_URL ?>/?page=laporan_monev&amp;generate=1&amp;edit=1&amp;triwulan=<?= $triwulan ?>&amp;tahun=<?= urlencode($tahun) ?>&amp;koordinator=<?= urlencode($koordinator) ?>&amp;penulis=<?= urlencode($penulis) ?>&amp;nama_kepala=<?= urlencode($namaKepala) ?>&amp;nip_kepala=<?= urlencode($nipKepala) ?>&amp;tanggal=<?= urlencode($tanggal) ?>">
+    </button>
+    <button type="button" class="btn-print btn-primary-edit" id="btnToggleEdit">
       <i class="fas fa-pen-to-square" aria-hidden="true"></i>
-      Edit Online
-    </a>
-    <span class="hint">Gunakan "Save as PDF" pada dialog cetak browser, unduh Word, atau edit langsung di browser.</span>
-    <?php else: ?>
-    <button type="button" class="btn-print" id="btnUnduhWordEdit">
-      <i class="fas fa-file-word" aria-hidden="true"></i>
-      Unduh Hasil Edit (.docx)
+      <span id="textToggleEdit">Edit Online</span>
     </button>
-    <button type="button" class="btn-print" id="btnResetDraft" style="background:#fee2e2;color:#991b1b;">
+    <button type="button" class="btn-print btn-save" id="btnSimpanDraft" style="display:none;">
+      <i class="fas fa-floppy-disk" aria-hidden="true"></i>
+      Simpan
+    </button>
+    <button type="button" class="btn-print btn-reset" id="btnResetDraft" style="<?= $hasSavedDraft ? '' : 'display:none;' ?>">
       <i class="fas fa-rotate-left" aria-hidden="true"></i>
-      Batalkan Perubahan
+      Kembali ke Data Asli
     </button>
-    <span class="hint"><i class="fas fa-pen-to-square"></i> Mode Edit Online &mdash; klik dokumen untuk mengubah teks. Perubahan tersimpan otomatis di browser.</span>
-    <?php endif; ?>
+    <button type="button" class="btn-print btn-exit" id="btnKeluar" title="Keluar / Tutup Laporan">
+      <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
+      Keluar
+    </button>
+    <span class="status-text" id="statusDraft">
+      <?php if ($hasSavedDraft): ?>
+        <i class="fas fa-check-circle" style="color:#4ade80;"></i> Versi tersimpan (<?= date('d/m/Y H:i', strtotime($draftUpdatedAt)) ?>)
+      <?php else: ?>
+        <i class="fas fa-database" style="color:#93c5fd;"></i> Data sistem
+      <?php endif; ?>
+    </span>
+  </div>
+
+  <div class="edit-mode-banner no-print" id="editModeBanner" style="display:none;">
+    <i class="fas fa-pen-to-square"></i>
+    <span><strong>Mode Edit Online Aktif:</strong> Anda dapat mengklik dan mengubah teks atau tabel langsung pada laporan. Klik tombol <strong>Simpan</strong> di toolbar atas setelah selesai mengedit.</span>
   </div>
 <?php endif; ?>
 
-  <div class="page-wrapper"<?= $isEdit ? ' id="editableWrapper"' : '' ?>>
+  <div class="page-wrapper" id="editableWrapper">
+<?php if ($hasSavedDraft): ?>
+    <?= $draftRow['konten_html'] ?>
+<?php else: ?>
 
     <!-- ── Halaman 1: Cover ──────────────────────────────────── -->
     <div class="cover doc-page page-break">
-      <div class="logo-wrap">
-        <img src="<?= APP_URL ?>/assets/img/logo.png" alt="Logo">
-      </div>
       <div class="doc-label">LAPORAN MONITORING DAN EVALUASI MANAJEMEN RISIKO</div>
       <div class="instansi-name">BALAI BESAR LABORATORIUM KESEHATAN LINGKUNGAN</div>
       <hr class="cover-divider">
       <div class="periode-label">TRIWULAN <?= xss($triwulanLabel) ?> TAHUN <?= xss($tahun) ?></div>
+      <div class="logo-wrap">
+        <img src="<?= APP_URL ?>/assets/img/logo.png" alt="Logo">
+      </div>
     </div>
 
     <!-- ── Halaman 2: Lembar Pengesahan ──────────────────────── -->
@@ -1164,12 +1864,12 @@ if ($isGenerate) {
         <tr>
           <td class="col-label">Koordinator dan Verifikator</td>
           <td class="col-sep">:</td>
-          <td class="col-val"><?= $koordinator !== '' ? xss($koordinator) : '_________________________' ?></td>
+          <td class="col-val"><?= xss($koordinator !== '' ? $koordinator : 'M. Edi Royandi, SKM, MPH') ?></td>
         </tr>
         <tr>
           <td class="col-label">Penulis</td>
           <td class="col-sep">:</td>
-          <td class="col-val"><?= $penulis !== '' ? xss($penulis) : '_________________________' ?></td>
+          <td class="col-val"><?= xss($penulis !== '' ? $penulis : 'Bramadita Kunni Fauziyyah') ?></td>
         </tr>
       </table>
 
@@ -1179,7 +1879,7 @@ if ($isGenerate) {
             $displayTanggal = (stripos($tglFmt, 'Salatiga') === 0) ? $tglFmt : ('Salatiga, ' . $tglFmt);
             $tanggalHtml    = xss($displayTanggal);
         } else {
-            $tanggalHtml    = 'Salatiga, _________________________';
+            $tanggalHtml    = xss('Salatiga, ' . laporanFormatTanggal(date('Y-m-d')));
         }
       ?>
       <div class="pengesahan-ttd-center">
@@ -1187,8 +1887,8 @@ if ($isGenerate) {
         <p>Disahkan oleh</p>
         <p>Kepala Balai Besar Laboratorium Kesehatan Lingkungan</p>
         <div class="ttd-space"></div>
-        <p class="ttd-nama"><?= $namaKepala !== '' ? xss($namaKepala) : '_________________________' ?></p>
-        <p class="ttd-nip"><?= $nipKepala !== '' ? 'NIP. ' . xss($nipKepala) : 'NIP. _________________________' ?></p>
+        <p class="ttd-nama"><?= xss($namaKepala !== '' ? $namaKepala : 'Akhmad Saikhu, SKM, M.Sc.PH') ?></p>
+        <p class="ttd-nip"><?= xss($nipKepala !== '' ? ('NIP. ' . $nipKepala) : 'NIP. 196805251992031004') ?></p>
       </div>
     </div>
 
@@ -1196,7 +1896,7 @@ if ($isGenerate) {
     <div class="bab doc-page" id="bab1">
       <h2 class="bab-heading">BAB I<br>PENDAHULUAN</h2>
 
-      <h3 class="subbab-heading">1.A. Latar Belakang</h3>
+      <h3 class="subbab-heading">A. Latar Belakang</h3>
       <p>
         Risiko adalah kemungkinan terjadinya suatu peristiwa yang berdampak negatif terhadap pencapaian sasaran organisasi. 
         Manajemen Risiko merupakan proses yang proaktif dan berkelanjutan meliputi identifikasi, analisis, evaluasi, pengendalian, 
@@ -1207,34 +1907,36 @@ if ($isGenerate) {
         Penerapan manajemen risiko bertujuan untuk mengidentifikasi dan memitigasi sumber-sumber risiko yang berpotensi menghambat pencapaian tujuan organisasi. Selain itu, 
         manajemen risiko juga menjadi dasar dalam pengambilan keputusan dan perencanaan strategis, serta berkontribusi dalam peningkatan kinerja organisasi. 
         Melalui penerapan manajemen risiko yang efektif, diharapkan organisasi mampu menjaga kesinambungan pelayanan kepada pemangku kepentingan, meningkatkan efisiensi 
-        dan efektivitas pelaksanaan kegiatan, serta menghindari terjadinya pemborosan sumber daya.Laporan ini menyajikan hasil monitoring dan evaluasi pelaksanaan pengendalian risiko
-        pada Balai Besar Laboratorium Kesehatan Lingkungan untuk periode Triwulan
-        <?= xss($triwulanLabel) ?> Tahun <?= xss($tahun) ?>. Laporan mencakup kondisi risiko awal,
-        upaya pengendalian yang dilaksanakan, kondisi risiko akhir periode, hambatan dan kendala
-        yang dihadapi, serta rencana tindak lanjut dari seluruh unit kerja di lingkungan Balai
-        Besar Laboratorium Kesehatan Lingkungan.
+        dan efektivitas pelaksanaan kegiatan, serta menghindari terjadinya pemborosan sumber daya.
+      </p>
+      <p>
+        Sebagai bagian dari Sistem Pengendalian Intern Pemerintah (SPIP), penerapan manajemen risiko di lingkungan instansi pemerintah telah diatur dalam Peraturan Pemerintah Nomor 60 Tahun 2008. Dalam peraturan tersebut, penilaian risiko merupakan salah satu unsur penting yang wajib dilaksanakan oleh pimpinan instansi pemerintah, yang meliputi tahapan identifikasi risiko dan analisis risiko. Selain itu, Kementerian Kesehatan Republik Indonesia juga telah menetapkan Peraturan Menteri Kesehatan Nomor 25 Tahun 2019 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan sebagai pedoman dalam pelaksanaan manajemen risiko.
+      </p>
+      <p>
+        Sehubungan dengan hal tersebut, diperlukan kegiatan monitoring dan evaluasi (Monev) pada pelaksanaan manajemen risiko di Balai Besar Laboratorium Kesehatan Lingkungan sebagai upaya untuk menilai efektivitas penerapan manajemen risiko yang telah dilaksanakan, memastikan kesesuaian dengan ketentuan yang berlaku, serta mengidentifikasi perbaikan yang diperlukan guna mendukung pencapaian tujuan organisasi secara optimal.
       </p>
 
-      <h3 class="subbab-heading">1.B. Dasar Hukum</h3>
+      <h3 class="subbab-heading">B. Dasar Hukum</h3>
       <ol>
-        <li>Peraturan Pemerintah Nomor 60 Tahun 2008 tentang Sistem Pengendalian Intern Pemerintah (SPIP).</li>
-        <li>Peraturan Kepala BPKP Nomor 4 Tahun 2016 tentang Pedoman Penilaian dan Strategi Peningkatan Maturitas Sistem Pengendalian Intern Pemerintah.</li>
-        <li>Peraturan Menteri Kesehatan Nomor 25 Tahun 2019 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan.</li>
-        <li>Peraturan Menteri Pendayagunaan Aparatur Negara dan Reformasi Birokrasi Nomor 5 Tahun 2020 tentang Road Map Reformasi Birokrasi 2020&ndash;2024.</li>
-        <li>Keputusan Menteri Kesehatan Nomor HK.01.07/MENKES/1160/2022 tentang Pedoman Manajemen Risiko Kementerian Kesehatan.</li>
-        <li>ISO 31000:2018 &mdash; Risk Management Guidelines.</li>
-        <li>Standar Nasional Indonesia SNI ISO 31000:2018 tentang Manajemen Risiko &mdash; Panduan.</li>
-        <li>Peraturan Pemerintah Nomor 12 Tahun 2019 tentang Pengelolaan Keuangan Daerah.</li>
-        <li>Rencana Strategis Balai Besar Laboratorium Kesehatan Lingkungan tahun <?= xss($tahun) ?>.</li>
+        <li>Undang-Undang Nomor 1 Tahun 2004 tentang Perbendaharaan Negara</li>
+        <li>Peraturan Pemerintah Nomor 60 tahun 2008 tentang Sistem Pengendalian Intern Pemerintah.</li>
+        <li>Peraturan Presiden Nomor 140 Tahun 2024 tentang Organisasi Kementerian Negara.</li>
+        <li>Peraturan Menteri Keuangan Nomor 17/PMK.09/2019 tentang Pedoman Penerapan, Penilaian dan Reviu Pengendalian Intern Atas Pelaporan Keuangan Pemerintah Pusat (PIPK).</li>
+        <li>Peraturan Kepala BPKP Nomor 5 tahun 2021 tentang Penilaian Maturitas Penyelenggaraan Sistem Pengendalian Intern Pemerintah Terintegrasi pada Kementerian/Lembaga /Pemerintah Daerah.</li>
+        <li>Peraturan Menteri Kesehatan Nomor 84 tahun 2019 tentang Tata Kelola Pengawasan Intern di Lingkungan Kementerian Kesehatan</li>
+        <li>Keputusan Menteri Kesehatan Nomor HK.01.07/MENKES/1354/2024 tentang Penerapan Manajemen Risiko Terintegrasi di Lingkungan Kementerian Kesehatan.</li>
+        <li>Peraturan Menteri Kesehatan Nomor 21 Tahun 2024 tentang Organisasi dan Tata Kerja Kementerian Kesehatan.</li>
+        <li>Peraturan Menteri Kesehatan Nomor 27 Tahun 2023 tentang Organisasi dan tata Kerja Balai Besar Laboratorium Kesehatan Lingkungan</li>
       </ol>
 
-      <h3 class="subbab-heading">1.C. Tujuan</h3>
+      <h3 class="subbab-heading">C. Tujuan</h3>
+      <p>Monitoring dan evaluasi manajemen risiko di Balai Besar Laboratorium Kesehatan Lingkungan (BBLKL) Salatiga bertujuan:</p>
       <ol>
-        <li>Memantau pelaksanaan pengendalian risiko yang telah direncanakan pada setiap unit kerja.</li>
-        <li>Mengevaluasi efektivitas upaya pengendalian risiko berdasarkan perubahan nilai dan tingkat risiko.</li>
-        <li>Mengidentifikasi hambatan dan kendala dalam pelaksanaan pengendalian risiko.</li>
-        <li>Merumuskan rencana tindak lanjut untuk meningkatkan efektivitas pengendalian risiko pada periode berikutnya.</li>
-        <li>Menyediakan bahan pengambilan keputusan bagi pimpinan terkait pengelolaan risiko organisasi.</li>
+        <li>Menilai efektivitas penerapan manajemen risiko di lingkungan organisasi.</li>
+        <li>Memastikan pelaksanaan manajemen risiko telah sesuai dengan ketentuan dan peraturan yang berlaku.</li>
+        <li>Mengidentifikasi risiko-risiko yang muncul serta mengevaluasi upaya mitigasi yang telah dilakukan</li>
+        <li>Mengidentifikasi kendala dan permasalahan dalam penerapan manajemen risiko sebagai bahan perbaikan berkelanjutan.</li>
+        <li>Memberikan rekomendasi perbaikan guna meningkatkan kualitas penerapan manajemen risiko pada periode selanjutnya</li>
       </ol>
     </div><!-- /#bab1 -->
 
@@ -1249,32 +1951,56 @@ if ($isGenerate) {
 
 <?php
     $allUnitData = [];
+    $unitLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
         $rows = laporanGetDataUnit($db, $unitKerja, $tahun, $triwulan);
         $allUnitData[$unitIdx] = $rows;
         $unitNo = $unitIdx + 1;
+        $huruf  = $unitLetters[$unitIdx] ?? (string)$unitNo;
 ?>
-      <h3 class="subbab-heading">2.<?= $unitNo ?>. <?= xss($unitKerja) ?></h3>
+      <h3 class="subbab-heading"><?= $huruf ?>. <?= xss($unitKerja) ?></h3>
+      <p class="table-caption" style="font-style:italic; margin-bottom:8px; font-size:10pt; text-indent:0;">Tabel <?= $unitNo ?>. Hasil Monev Risiko <?= xss($unitKerja) ?> Triwulan <?= $triwulan ?> Tahun <?= xss($tahun) ?></p>
 
       <table class="laporan-table">
+        <colgroup>
+          <col style="width:3.5%;">
+          <col style="width:6.5%;">
+          <col style="width:25%;">
+          <col style="width:3.5%;">
+          <col style="width:3.5%;">
+          <col style="width:4.5%;">
+          <col style="width:9%;">
+          <col style="width:23%;">
+          <col style="width:3.5%;">
+          <col style="width:3.5%;">
+          <col style="width:4.5%;">
+          <col style="width:9%;">
+        </colgroup>
         <thead>
+<?php
+    $romawiArr = ['I', 'II', 'III', 'IV'];
+    $kolomKiriJudul  = ($triwulan > 1) ? 'KONDISI AKHIR' : 'KONDISI AWAL';
+    $kolomKiriTw     = ($triwulan > 1) ? '(TW ' . ($romawiArr[$triwulan - 2] ?? 'I') . ')' : '(TW I)';
+    $kolomKananJudul = 'KONDISI AKHIR';
+    $kolomKananTw    = '(TW ' . ($romawiArr[$triwulan - 1] ?? 'I') . ')';
+?>
           <tr>
             <th rowspan="2" class="no-col">No</th>
             <th rowspan="2" class="kode-col">Kode<br>Risiko</th>
-            <th rowspan="2" style="min-width:160px;">Pernyataan Risiko</th>
-            <th colspan="4">KONDISI AKHIR TRIWULAN I</th>
-            <th rowspan="2" style="min-width:140px;">Upaya Pengendalian</th>
-            <th colspan="4">KONDISI AKHIR TRIWULAN <?= xss($triwulanLabel) ?></th>
+            <th rowspan="2" class="pernyataan-col">Pernyataan Risiko</th>
+            <th colspan="4"><?= $kolomKiriJudul ?><br><?= $kolomKiriTw ?></th>
+            <th rowspan="2" class="upaya-col">Upaya Pengendalian</th>
+            <th colspan="4"><?= $kolomKananJudul ?><br><?= $kolomKananTw ?></th>
           </tr>
           <tr>
             <th class="small-col">P</th>
             <th class="small-col">D</th>
             <th class="nilai-col">Nilai</th>
-            <th class="tingkat-col">Tingkat Risiko</th>
+            <th class="tingkat-col">Tingkat<br>Risiko</th>
             <th class="small-col">P</th>
             <th class="small-col">D</th>
             <th class="nilai-col">Nilai</th>
-            <th class="tingkat-col">Tingkat Risiko</th>
+            <th class="tingkat-col">Tingkat<br>Risiko</th>
           </tr>
         </thead>
         <tbody>
@@ -1295,20 +2021,18 @@ if ($isGenerate) {
                 // Kondisi awal — selalu dari kkpr_risiko, tidak pernah NULL
                 $awalP     = ($row['awal_p']     !== null) ? xss((string)$row['awal_p'])     : '-';
                 $awalD     = ($row['awal_d']     !== null) ? xss((string)$row['awal_d'])     : '-';
-                $awalNilai = ($row['awal_nilai'] !== null) ? xss((string)$row['awal_nilai']) : '-';
+                $awalNilai = ($row['awal_nilai'] !== null) ? xss((string)round((float)$row['awal_nilai'])) : '-';
 
                 // Kondisi akhir — dari monev_triwulan (LEFT JOIN → NULL jika tidak ada)
                 $akhirP     = ($row['akhir_p']     !== null) ? xss((string)$row['akhir_p'])     : '-';
                 $akhirD     = ($row['akhir_d']     !== null) ? xss((string)$row['akhir_d'])     : '-';
-                $akhirNilai = ($row['akhir_nilai'] !== null) ? xss((string)$row['akhir_nilai']) : '-';
+                $akhirNilai = ($row['akhir_nilai'] !== null) ? xss((string)round((float)$row['akhir_nilai'])) : '-';
                 $akhirTingkatDisplay = ($row['akhir_nilai'] !== null && $akhirTingkat !== '')
                     ? xss($akhirTingkat)
                     : '-';
 
-                // Upaya pengendalian — NULL/kosong → "-"
-                $upaya = (isset($row['upaya_pengendalian']) && $row['upaya_pengendalian'] !== null && $row['upaya_pengendalian'] !== '')
-                    ? xss($row['upaya_pengendalian'])
-                    : '-';
+                // Upaya pengendalian — pisahkan tiap butir ke baris baru (<br>)
+                $upayaHtml = laporanFormatUpayaHtml($row['upaya_pengendalian'] ?? null);
 ?>
           <tr>
             <td class="center"><?= $rowNo + 1 ?></td>
@@ -1320,7 +2044,7 @@ if ($isGenerate) {
             <td class="tingkat-col center" style="background-color:<?= laporanRisikoBg($awalTingkat) ?>; color:<?= laporanRisikoColor($awalTingkat) ?>;">
               <?= ($awalTingkat !== '') ? xss($awalTingkat) : '-' ?>
             </td>
-            <td><?= $upaya ?></td>
+            <td><?= $upayaHtml ?></td>
             <td class="center"><?= $akhirP ?></td>
             <td class="center"><?= $akhirD ?></td>
             <td class="center"><?= $akhirNilai ?></td>
@@ -1343,24 +2067,27 @@ if ($isGenerate) {
 
     <!-- ── BAB III ────────────────────────────────────────────── -->
     <div class="bab doc-page" id="bab3">
-      <h2 class="bab-heading">BAB III<br>HAMBATAN DAN KENDALA</h2>
+      <h2 class="bab-heading">BAB III<br>HAMBATAN YANG DITEMUI</h2>
+
+      <p>Dalam pelaksanaan pengendalian risiko pada Triwulan <?= xss($triwulanLabel) ?> Tahun <?= xss($tahun) ?>, terdapat beberapa hambatan yang masih dihadapi oleh unit kerja, antara lain:</p>
 
 <?php
-    $unitHuruf = ['A', 'B', 'C', 'D', 'E', 'F'];
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
-        $huruf    = $unitHuruf[$unitIdx];
-        $unitNo   = $unitIdx + 1;
-        $kendalaList = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
+        $unitNo      = $unitIdx + 1;
+        $rawKendala  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
+        $kendalaList = laporanPecahItemDaftar($rawKendala);
 ?>
-      <h3 class="subbab-heading">3.<?= $unitNo ?>. <?= xss($unitKerja) ?></h3>
+      <h3 class="subbab-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h3>
 
 <?php if (empty($kendalaList)): ?>
       <p>Tidak ditemukan kendala dalam pelaksanaan kegiatan.</p>
 <?php else: ?>
       <p>Hambatan yang ditemui meliputi:</p>
-      <ol>
-<?php   foreach ($kendalaList as $kendala): ?>
-        <li><?= xss($kendala) ?></li>
+      <ol class="laporan-sublist laporan-sublist-letter">
+<?php   foreach ($kendalaList as $i => $kendala):
+            $prefix = laporanFormatLetterPrefix($i);
+?>
+        <li><span class="sublist-prefix"><?= xss($prefix) ?></span><span class="sublist-text"><?= xss($kendala) ?></span></li>
 <?php   endforeach; ?>
       </ol>
 <?php endif; ?>
@@ -1372,7 +2099,7 @@ if ($isGenerate) {
     <div class="bab doc-page" id="bab4">
       <h2 class="bab-heading">BAB IV<br>PENUTUP</h2>
 
-      <h3 class="subbab-heading">A. Kesimpulan</h3>
+      <h3 class="subbab-heading">A. KESIMPULAN</h3>
 
 <?php
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
@@ -1380,79 +2107,192 @@ if ($isGenerate) {
         $rowsBab4 = $allUnitData[$unitIdx] ?? [];
         $stat     = laporanHitungStatistik($rowsBab4);
 ?>
-      <h4 class="unit-heading">4.A.<?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
+      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
 
 <?php if ($stat['total_monev'] === 0): ?>
       <p>Belum terdapat data monitoring dan evaluasi untuk unit kerja ini pada periode yang dipilih.</p>
 <?php else: ?>
-      <p>Berdasarkan hasil monitoring dan evaluasi triwulan <?= xss($triwulanLabel) ?> tahun <?= xss($tahun) ?>, diperoleh kesimpulan sebagai berikut:</p>
       <ol type="a">
-        <li>Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak <strong><?= (int)$stat['turun'] ?></strong> risiko.</li>
-        <li>Jumlah risiko dengan tingkat risiko tetap sebanyak <strong><?= (int)$stat['tetap'] ?></strong> risiko.</li>
-        <li>Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak <strong><?= (int)$stat['naik'] ?></strong> risiko.</li>
-        <li>Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi sebanyak <strong><?= (int)$stat['tinggi'] ?></strong> risiko.</li>
+        <li>Jumlah risiko dengan tingkat risiko &ldquo;Sangat Tinggi&rdquo; sebanyak <strong><?= (int)$stat['sangat_tinggi'] ?></strong> risiko</li>
+        <li>Jumlah risiko dengan tingkat risiko &ldquo;Tinggi&rdquo; sebanyak <strong><?= (int)$stat['tinggi_level'] ?></strong> risiko</li>
+        <li>Jumlah risiko dengan tingkat risiko &ldquo;Sedang&rdquo; sebanyak <strong><?= (int)$stat['sedang'] ?></strong> risiko</li>
+        <li>Jumlah risiko dengan tingkat risiko &ldquo;Rendah&rdquo; sebanyak <strong><?= (int)$stat['rendah'] ?></strong> risiko</li>
+        <li>Jumlah risiko dengan tingkat risiko &ldquo;Sangat Rendah&rdquo; sebanyak <strong><?= (int)$stat['sangat_rendah'] ?></strong> risiko</li>
       </ol>
 <?php endif; ?>
 
 <?php endforeach; ?>
 
-      <h3 class="subbab-heading">B. Rencana Tindak Lanjut</h3>
+      <h3 class="subbab-heading">B. RENCANA TINDAK LANJUT</h3>
+      <p>Dalam pelaksanaan pengendalian risiko pada Triwulan <?= xss($triwulanLabel) ?> Tahun <?= xss($tahun) ?>, telah ditetapkan beberapa rencana tindak lanjut, antara lain:</p>
 
 <?php
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
         $unitNo  = $unitIdx + 1;
-        $rtlList = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
+        $rawRtl  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
+        $rtlList = laporanPecahItemDaftar($rawRtl);
 ?>
-      <h4 class="unit-heading">4.B.<?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
+      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
 
 <?php if (empty($rtlList)): ?>
       <p>Rencana Tindak Lanjut yang akan dilakukan adalah melanjutkan upaya pengendalian yang sudah direncanakan.</p>
 <?php else: ?>
       <p>Rencana tindak lanjut yang akan dilakukan meliputi:</p>
-      <ol>
-<?php   foreach ($rtlList as $rtl): ?>
-        <li><?= xss($rtl) ?></li>
+      <ol class="laporan-sublist laporan-sublist-letter">
+<?php   foreach ($rtlList as $i => $rtl):
+            $prefix = laporanFormatLetterPrefix($i);
+?>
+        <li><span class="sublist-prefix"><?= xss($prefix) ?></span><span class="sublist-text"><?= xss($rtl) ?></span></li>
 <?php   endforeach; ?>
       </ol>
 <?php endif; ?>
 
 <?php endforeach; ?>
     </div><!-- /#bab4 -->
+<?php endif; ?>
 
   </div><!-- /.page-wrapper -->
 
-<?php if ($isEdit): ?>
+<?php if (!$isWordDoc): ?>
   <script>
   (function () {
       var wrapper = document.getElementById('editableWrapper');
       if (!wrapper) return;
 
-      // Aktifkan editing
-      wrapper.setAttribute('contenteditable', 'true');
-      wrapper.setAttribute('spellcheck', 'false');
+      var btnToggle = document.getElementById('btnToggleEdit');
+      var btnSimpan = document.getElementById('btnSimpanDraft');
+      var btnReset  = document.getElementById('btnResetDraft');
+      var btnUnduh  = document.getElementById('btnUnduhWord');
+      var statusText = document.getElementById('statusDraft');
+      var editBanner = document.getElementById('editModeBanner');
 
-      // Draft tersimpan otomatis di localStorage (per kombinasi parameter)
-      var draftKey = 'laporan_monev_draft_' + location.search;
+      var tahun     = <?= json_encode((string)$tahun) ?>;
+      var triwulan  = <?= json_encode((int)$triwulan) ?>;
+      var csrfToken = <?= json_encode(csrfToken()) ?>;
+      var draftKey  = 'laporan_monev_draft_' + tahun + '_' + triwulan;
 
-      // Pulihkan draft sebelumnya jika ada
-      try {
-          var draft = localStorage.getItem(draftKey);
-          if (draft) {
-              wrapper.innerHTML = draft;
+      var isEditMode = <?= $isEdit ? 'true' : 'false' ?>;
+      var hasUnsavedChanges = false;
+      var autoSaveTimer = null;
+
+      function showToast(msg, isError) {
+          var toast = document.createElement('div');
+          toast.className = 'laporan-toast' + (isError ? ' error' : '');
+          toast.innerHTML = (isError ? '<i class="fas fa-circle-exclamation"></i> ' : '<i class="fas fa-check-circle"></i> ') + msg;
+          document.body.appendChild(toast);
+          setTimeout(function () { toast.classList.add('show'); }, 20);
+          setTimeout(function () {
+              toast.classList.remove('show');
+              setTimeout(function () { toast.remove(); }, 300);
+          }, 3200);
+      }
+
+      function setEditMode(active) {
+          isEditMode = active;
+          if (active) {
+              wrapper.setAttribute('contenteditable', 'true');
+              wrapper.setAttribute('spellcheck', 'false');
+              wrapper.classList.add('is-editing');
+              if (editBanner) editBanner.style.display = 'flex';
+              if (btnSimpan) btnSimpan.style.display = 'inline-flex';
+              if (btnReset) btnReset.style.display = 'inline-flex';
+              btnToggle.classList.remove('btn-primary-edit');
+              btnToggle.classList.add('btn-done');
+              btnToggle.innerHTML = '<i class="fas fa-check"></i> Selesai Edit';
+              statusText.innerHTML = hasUnsavedChanges
+                  ? '<i class="fas fa-circle-exclamation" style="color:#fbbf24;"></i> Ada perubahan belum disimpan'
+                  : '<i class="fas fa-pen" style="color:#60a5fa;"></i> Mode edit aktif (siap diedit)';
+          } else {
+              wrapper.removeAttribute('contenteditable');
+              wrapper.classList.remove('is-editing');
+              if (editBanner) editBanner.style.display = 'none';
+              if (btnSimpan) btnSimpan.style.display = 'none';
+              btnToggle.classList.remove('btn-done');
+              btnToggle.classList.add('btn-primary-edit');
+              btnToggle.innerHTML = '<i class="fas fa-pen-to-square"></i> <span id="textToggleEdit">Edit Online</span>';
           }
-      } catch (e) { /* localStorage tidak tersedia — abaikan */ }
+      }
 
-      // Autosave (debounce 800ms)
-      var saveTimer = null;
+      // Tombol Edit Online / Selesai Edit
+      if (btnToggle) {
+          btnToggle.addEventListener('click', function () {
+              if (!isEditMode) {
+                  setEditMode(true);
+              } else {
+                  if (hasUnsavedChanges) {
+                      saveDraft(function () {
+                          setEditMode(false);
+                      });
+                  } else {
+                      setEditMode(false);
+                  }
+              }
+          });
+      }
+
+      // Deteksi perubahan isi dokumen
       wrapper.addEventListener('input', function () {
-          clearTimeout(saveTimer);
-          saveTimer = setTimeout(function () {
+          hasUnsavedChanges = true;
+          statusText.innerHTML = '<i class="fas fa-circle-exclamation" style="color:#fbbf24;"></i> Ada perubahan belum disimpan';
+
+          // Autosave ke localStorage sebagai cadangan instan (debounce 1.5s)
+          clearTimeout(autoSaveTimer);
+          autoSaveTimer = setTimeout(function () {
               try { localStorage.setItem(draftKey, wrapper.innerHTML); } catch (e) {}
-          }, 800);
+          }, 1500);
       });
 
-      // Tombol: unduh .docx dari konten hasil edit
-      var btnUnduh = document.getElementById('btnUnduhWordEdit');
+      // Fungsi simpan draft ke database server
+      function saveDraft(callback) {
+          if (btnSimpan) {
+              btnSimpan.disabled = true;
+              btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+          }
+          statusText.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:#93c5fd;"></i> Menyimpan perubahan...';
+
+          var fd = new FormData();
+          fd.append('action', 'save_draft');
+          fd.append('csrf_token', csrfToken);
+          fd.append('tahun', tahun);
+          fd.append('triwulan', triwulan);
+          fd.append('html', wrapper.innerHTML);
+
+          fetch('<?= APP_URL ?>/?page=laporan_monev', {
+              method: 'POST',
+              body: fd,
+              credentials: 'same-origin'
+          }).then(function (res) {
+              return res.json().then(function (j) {
+                  if (!res.ok || !j.ok) {
+                      throw new Error(j.message || j.error || 'Gagal menyimpan.');
+                  }
+                  return j;
+              });
+          }).then(function (res) {
+              hasUnsavedChanges = false;
+              try { localStorage.setItem(draftKey, wrapper.innerHTML); } catch (e) {}
+              statusText.innerHTML = '<i class="fas fa-check-circle" style="color:#4ade80;"></i> Tersimpan (' + res.updated_at + ')';
+              if (btnReset) btnReset.style.display = 'inline-flex';
+              showToast('Laporan berhasil disimpan ke sistem!');
+              if (typeof callback === 'function') callback();
+          }).catch(function (err) {
+              statusText.innerHTML = '<i class="fas fa-triangle-exclamation" style="color:#f87171;"></i> Gagal menyimpan';
+              showToast('Gagal menyimpan: ' + err.message, true);
+          }).finally(function () {
+              if (btnSimpan) {
+                  btnSimpan.disabled = false;
+                  btnSimpan.innerHTML = '<i class="fas fa-floppy-disk"></i> Simpan';
+              }
+          });
+      }
+
+      if (btnSimpan) {
+          btnSimpan.addEventListener('click', function () {
+              saveDraft();
+          });
+      }
+
+      // Tombol Unduh Word (.docx)
       if (btnUnduh) {
           btnUnduh.addEventListener('click', function () {
               btnUnduh.disabled = true;
@@ -1460,9 +2300,9 @@ if ($isGenerate) {
 
               var fd = new FormData();
               fd.append('action', 'download_docx');
-              fd.append('csrf_token', <?= json_encode(csrfToken()) ?>);
-              fd.append('triwulan', <?= json_encode((string)$triwulan) ?>);
-              fd.append('tahun', <?= json_encode($tahun) ?>);
+              fd.append('csrf_token', csrfToken);
+              fd.append('triwulan', triwulan);
+              fd.append('tahun', tahun);
               fd.append('html', wrapper.outerHTML);
 
               fetch('<?= APP_URL ?>/?page=laporan_monev', {
@@ -1479,7 +2319,7 @@ if ($isGenerate) {
               }).then(function (blob) {
                   var a = document.createElement('a');
                   a.href = URL.createObjectURL(blob);
-                  a.download = <?= json_encode('Laporan_Monev_TW' . ['I','II','III','IV'][$triwulan-1] . '_' . $tahun . '_edited.docx') ?>;
+                  a.download = <?= json_encode('Laporan_Monev_TW' . ['I','II','III','IV'][$triwulan-1] . '_' . $tahun . '.docx') ?>;
                   document.body.appendChild(a);
                   a.click();
                   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
@@ -1487,34 +2327,85 @@ if ($isGenerate) {
                   alert('Gagal mengunduh: ' + err.message);
               }).finally(function () {
                   btnUnduh.disabled = false;
-                  btnUnduh.innerHTML = '<i class="fas fa-file-word"></i> Unduh Hasil Edit (.docx)';
+                  btnUnduh.innerHTML = '<i class="fas fa-file-word"></i> Unduh Word (.docx)';
               });
           });
       }
 
-      // Tombol: hapus draft & muat ulang dokumen asli
-      var btnReset = document.getElementById('btnResetDraft');
+      // Tombol Reset ke Data Asli
       if (btnReset) {
           btnReset.addEventListener('click', function () {
-              if (!confirm('Batalkan semua perubahan dan kembali ke dokumen asli?')) return;
-              try { localStorage.removeItem(draftKey); } catch (e) {}
-              window.location.reload();
+              if (!confirm('Apakah Anda yakin ingin membatalkan semua perubahan dan kembali ke data asli sistem? Data yang sudah disimpan akan dihapus.')) return;
+              btnReset.disabled = true;
+              btnReset.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mereset...';
+
+              var fd = new FormData();
+              fd.append('action', 'reset_draft');
+              fd.append('csrf_token', csrfToken);
+              fd.append('tahun', tahun);
+              fd.append('triwulan', triwulan);
+
+              fetch('<?= APP_URL ?>/?page=laporan_monev', {
+                  method: 'POST',
+                  body: fd,
+                  credentials: 'same-origin'
+              }).then(function (res) {
+                  return res.json().then(function (j) {
+                      if (!res.ok || !j.ok) throw new Error(j.message || 'Gagal reset');
+                      return j;
+                  });
+              }).then(function () {
+                  try { localStorage.removeItem(draftKey); } catch (e) {}
+                  var url = new URL(window.location.href);
+                  url.searchParams.delete('edit');
+                  window.location.href = url.toString();
+              }).catch(function (err) {
+                  alert('Gagal mengembalikan data: ' + err.message);
+                  btnReset.disabled = false;
+                  btnReset.innerHTML = '<i class="fas fa-rotate-left"></i> Kembali ke Data Asli';
+              });
           });
+      }
+
+      // Tombol Keluar / Exit
+      var btnKeluar = document.getElementById('btnKeluar');
+      if (btnKeluar) {
+          btnKeluar.addEventListener('click', function () {
+              if (hasUnsavedChanges) {
+                  if (!confirm('Ada perubahan yang belum disimpan. Yakin ingin keluar?')) {
+                      return;
+                  }
+              }
+              // Coba tutup tab jika dibuka via window.open (tab baru)
+              window.close();
+              // Jika tidak menutup otomatis (karena pembatasan browser atau dibuka di tab yang sama),
+              // navigasikan kembali ke halaman form Laporan Monev
+              setTimeout(function () {
+                  window.location.href = '<?= APP_URL ?>/?page=laporan_monev';
+              }, 150);
+          });
+      }
+
+      window.addEventListener('beforeunload', function (e) {
+          if (hasUnsavedChanges) {
+              e.preventDefault();
+              e.returnValue = '';
+          }
+      });
+
+      // Auto start edit mode jika dibuka dengan parameter edit=1
+      if (isEditMode) {
+          setEditMode(true);
+      }
+
+      // Auto trigger print/simpan PDF jika dibuka dengan autoprint=1
+      if (new URLSearchParams(window.location.search).get('autoprint') === '1') {
+          setTimeout(function () {
+              window.print();
+          }, 600);
       }
   })();
   </script>
-  <style>
-  /* Fokus editing terlihat jelas, tapi tidak ikut tercetak */
-  #editableWrapper[contenteditable]:focus {
-      outline: 2px dashed #60a5fa;
-      outline-offset: 6px;
-  }
-  @media print {
-      #editableWrapper[contenteditable]:focus {
-          outline: none;
-      }
-  }
-  </style>
 <?php endif; ?>
 
 </body>
@@ -1535,19 +2426,27 @@ if ($isGenerate) {
     ];
     ?>
     <!-- ── Hero Banner ── -->
-    <div class="risiko-hero profil-risiko-hero" style="background:linear-gradient(115deg,#1e3a5f 0%,#1e40af 55%,#0891b2 100%); align-items: flex-start !important;">
+    <div class="risiko-hero profil-risiko-hero" style="background:linear-gradient(115deg,#1e3a5f 0%,#1e40af 55%,#0891b2 100%);">
       <div class="risiko-hero-copy">
         <div class="risiko-eyebrow"><i class="fas fa-file-medical-alt"></i> Laporan</div>
         <h1 class="page-title" style="color:#fff">Laporan Monev Manajemen Risiko</h1>
-        <p class="page-sub" style="color:rgba(255,255,255,.82)">Generate dokumen laporan monitoring dan evaluasi manajemen risiko siap cetak/PDF.</p>
+        <p class="page-sub" style="color:rgba(255,255,255,.85)">Generate dokumen laporan monitoring dan evaluasi manajemen risiko siap cetak/PDF.</p>
+      </div>
+      <div class="profil-hero-tools risiko-hero-tools-align">
+        <div style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12); padding:8px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,.2); color:#fff; font-size:.85rem;">
+          <i class="fas fa-calendar-check" style="font-size:1.1rem; color:#93c5fd;"></i>
+          <span>Periode Triwulanan &amp; Tahunan</span>
+        </div>
       </div>
     </div>
 
     <!-- ── Kartu Form Generator ── -->
-    <div class="card" style="margin-top:24px; max-width:780px;">
-      <div class="card-header" style="display:flex; align-items:center; gap:10px;">
-        <i class="fas fa-file-alt" style="color:var(--accent);font-size:1.1rem;"></i>
-        <strong>Parameter Laporan</strong>
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header" style="display:flex; justify-content:flex-start; align-items:center;">
+        <div class="card-title" style="display:inline-flex; align-items:center; gap:10px; margin:0;">
+          <i class="fas fa-file-alt" style="color:var(--primary);font-size:1.1rem;"></i>
+          <span>Parameter Laporan</span>
+        </div>
       </div>
       <div class="card-body">
         <form method="get" action="<?= APP_URL ?>/" id="formLaporanMonev"
@@ -1594,15 +2493,15 @@ if ($isGenerate) {
               <label class="form-label" for="fKoordinator">Koordinator dan Verifikator</label>
               <input type="text" name="koordinator" id="fKoordinator" class="form-control"
                      maxlength="100"
-                     placeholder="Nama koordinator dan verifikator"
-                     value="<?= xss($koordinator) ?>">
+                     placeholder="contoh: M. Edi Royandi, SKM, MPH"
+                     value="<?= xss($koordinator !== '' ? $koordinator : 'M. Edi Royandi, SKM, MPH') ?>">
             </div>
             <div class="form-group">
               <label class="form-label" for="fPenulis">Penulis</label>
               <input type="text" name="penulis" id="fPenulis" class="form-control"
                      maxlength="100"
-                     placeholder="Nama penulis / penyusun"
-                     value="<?= xss($penulis) ?>">
+                     placeholder="contoh: Bramadita Kunni Fauziyyah"
+                     value="<?= xss($penulis !== '' ? $penulis : 'Bramadita Kunni Fauziyyah') ?>">
             </div>
           </div>
 
@@ -1612,32 +2511,39 @@ if ($isGenerate) {
               <label class="form-label" for="fNamaKepala">Nama Kepala BBLKL</label>
               <input type="text" name="nama_kepala" id="fNamaKepala" class="form-control"
                      maxlength="100"
-                     placeholder="Nama lengkap kepala instansi"
-                     value="<?= xss($namaKepala) ?>">
+                     placeholder="contoh: Akhmad Saikhu, SKM, M.Sc.PH"
+                     value="<?= xss($namaKepala !== '' ? $namaKepala : 'Akhmad Saikhu, SKM, M.Sc.PH') ?>">
             </div>
             <div class="form-group">
               <label class="form-label" for="fNipKepala">NIP Kepala BBLKL</label>
               <input type="text" name="nip_kepala" id="fNipKepala" class="form-control"
                      maxlength="20"
-                     placeholder="NIP kepala instansi"
-                     value="<?= xss($nipKepala) ?>">
+                     placeholder="contoh: 196805251992031004"
+                     value="<?= xss($nipKepala !== '' ? $nipKepala : '196805251992031004') ?>">
             </div>
           </div>
 
           <!-- Baris 4: Tanggal Pengesahan -->
-          <div class="form-group">
-            <label class="form-label" for="fTanggal">Tanggal Pengesahan</label>
-            <input type="date" name="tanggal" id="fTanggal" class="form-control"
-                   value="<?= xss(laporanTanggalKeIso($tanggal)) ?>"
-                   style="max-width:320px;">
+          <div class="form-row-2" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:0;">
+            <div class="form-group">
+              <label class="form-label" for="fTanggal">Tanggal Pengesahan</label>
+              <input type="date" name="tanggal" id="fTanggal" class="form-control"
+                     value="<?= xss(laporanTanggalKeIso($tanggal) ?: date('Y-m-d')) ?>">
+            </div>
+            <div></div>
           </div>
 
           <!-- Tombol Submit -->
-          <div style="display:flex; align-items:center; gap:12px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--border); flex-wrap:wrap;">
             <button type="submit" class="btn btn-primary" id="btnGenerateLaporan"
                     style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px;">
-              <i class="fas fa-file-pdf"></i>
+              <i class="fas fa-eye"></i>
               <span>Generate Laporan</span>
+            </button>
+            <button type="button" class="btn btn-outline" id="btnUnduhPdf"
+                    style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#dc2626; color:#dc2626;">
+              <i class="fas fa-file-pdf"></i>
+              <span>Unduh PDF (.pdf)</span>
             </button>
             <button type="button" class="btn btn-outline" id="btnUnduhWord"
                     style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px;">
@@ -1649,9 +2555,9 @@ if ($isGenerate) {
               <i class="fas fa-pen-to-square"></i>
               <span>Edit Online</span>
             </button>
-            <span style="font-size:.8rem; color:var(--text-muted);">
+            <span style="font-size:.8rem; color:var(--text-muted); margin-left:auto;">
               <i class="fas fa-info-circle"></i>
-              Preview (cetak/PDF), unduh .docx, atau edit langsung di browser lalu unduh hasilnya.
+              Preview, unduh PDF, unduh Word (.docx), atau edit langsung di browser lalu simpan.
             </span>
           </div>
         </form>
@@ -1695,6 +2601,22 @@ if ($isGenerate) {
 
             window.open('<?= APP_URL ?>/?' + buildParams().toString(), '_blank');
         });
+
+        // Tombol Unduh PDF — buka laporan dan otomatis buka dialog simpan PDF
+        var btnPdf = document.getElementById('btnUnduhPdf');
+        if (btnPdf) {
+            btnPdf.addEventListener('click', function () {
+                var triwulan = document.getElementById('fTriwulan');
+                var tahun    = document.getElementById('fTahun');
+
+                if (!triwulan.value || !tahun.value) {
+                    form.reportValidity();
+                    return;
+                }
+
+                window.open('<?= APP_URL ?>/?' + buildParams({ autoprint: '1' }).toString(), '_blank');
+            });
+        }
 
         // Tombol Unduh Word — navigasi biasa agar download terpicu
         var btnWord = document.getElementById('btnUnduhWord');

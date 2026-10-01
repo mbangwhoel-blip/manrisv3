@@ -160,30 +160,43 @@ final class LaporanMonevWalker
                 $align  = 'both';
                 $isBold = false;
                 $size   = 11;
+                $hasIndent = true;
                 if (str_contains($class, 'tanggal-pengesahan')) {
                     $align = 'right';
+                    $hasIndent = false;
                 } elseif (str_contains($class, 'periode-label')) {
                     $align = 'center';
                     $size  = 12;
+                    $hasIndent = false;
                 }
                 // Paragraf di dalam cover → center bold 12
                 if ($this->insideCover($n)) {
                     $align  = 'center';
                     $isBold = true;
                     $size   = 12;
+                    $hasIndent = false;
                 }
                 if ($this->insidePengesahanSubjudul($n)) {
                     $align  = 'center';
                     $isBold = true;
                     $size   = 11;
+                    $hasIndent = false;
                 }
                 if ($this->insidePengesahanTtdCenter($n)) {
                     $align  = 'center';
                     $isBold = false;
                     $size   = str_contains($class, 'ttd-nip') ? 10 : 11;
+                    $hasIndent = false;
+                }
+                if (str_contains($class, 'table-caption') || str_contains($class, 'caption') || str_contains($class, 'no-indent')) {
+                    $hasIndent = false;
                 }
                 $spaceAfter = ($this->insidePengesahanSubjudul($n) || $this->insidePengesahanTtdCenter($n)) ? 40 : 120;
-                $run = $this->section->addTextRun(['alignment' => $align, 'spaceAfter' => $spaceAfter]);
+                $runStyle = ['alignment' => $align, 'spaceAfter' => $spaceAfter];
+                if ($hasIndent) {
+                    $runStyle['indent'] = ['firstLine' => 720];
+                }
+                $run = $this->section->addTextRun($runStyle);
                 $this->fillRuns($n, $run, ['bold' => $isBold, 'size' => $size]);
                 return;
 
@@ -265,18 +278,45 @@ final class LaporanMonevWalker
     private function walkList(DOMElement $list): void
     {
         $no = 0;
+        $isUl      = (strtolower($list->nodeName) === 'ul');
+        $listClass = (string)($list->getAttribute('class') ?? '');
+        $listType  = strtolower((string)($list->getAttribute('type') ?? ''));
+        $listStyle = strtolower((string)($list->getAttribute('style') ?? ''));
+        $isUnstyled = str_contains($listClass, 'list-unstyled')
+            || str_contains($listClass, 'laporan-sublist')
+            || str_contains($listStyle, 'list-style:none')
+            || str_contains($listStyle, 'list-style: none')
+            || str_contains($listStyle, 'list-style-type:none')
+            || str_contains($listStyle, 'list-style-type: none');
+
+        $isLetterList = str_contains($listClass, 'laporan-sublist-letter');
+        $indentSize   = $isLetterList ? 280 : 360;
+
         foreach ($list->childNodes as $li) {
             if ($li->nodeType !== XML_ELEMENT_NODE || strtolower($li->nodeName) !== 'li') {
                 continue;
             }
             $no++;
             $run = $this->section->addTextRun([
-                'alignment' => 'both',
-                'indent'    => 360,
-                'hanging'   => 360,
+                'alignment'  => 'both',
+                'indent'     => $indentSize,
+                'hanging'    => $indentSize,
                 'spaceAfter' => 40,
             ]);
-            $run->addText($no . '. ', ['size' => 11]);
+
+            $textTrim = trim($li->textContent);
+            $hasOwnPrefix = (bool)preg_match('/^(\d+\.[a-zA-Z0-9]+[\.\)]|[a-zA-Z0-9]+[\.\)]|[-•*])\s+/u', $textTrim);
+
+            if ($isUnstyled || $hasOwnPrefix) {
+                // Item sudah memiliki prefix (misal "1.a. ") atau daftar bernilai unstyled
+            } elseif ($listType === 'a') {
+                $letter = chr(97 + (($no - 1) % 26));
+                $run->addText($letter . '. ', ['size' => 11]);
+            } elseif ($isUl) {
+                $run->addText('- ', ['size' => 11]);
+            } else {
+                $run->addText($no . '. ', ['size' => 11]);
+            }
             $this->fillRuns($li, $run, ['size' => 11]);
         }
     }

@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    SISTEM MANAJEMEN RISIKO — MAIN CSS
    Theme: Corporate Blue + Silver Premium
    ============================================================ */
@@ -1003,6 +1003,11 @@ textarea.form-control{resize:vertical;min-height:90px}
 .act-btn-sign{background:transparent;color:var(--accent);border-color:var(--border);}
 .act-btn-sign:hover{background:var(--surface2);}
 .act-btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* ── User Action Button Group ───────────────────────────────── */
+.user-act-group{display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:nowrap;white-space:nowrap;}
+.user-act-group .act-btn{flex:0 0 30px;}
+td:has(.user-act-group){white-space:nowrap;vertical-align:middle;}
 /* ── IKK Data Table: Seragam & Ringkas ── */
 .ikk-data-table {
   table-layout: auto;
