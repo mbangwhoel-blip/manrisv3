@@ -49,8 +49,8 @@ $isWordDoc = $isGenerate && $format === 'doc';
 // lalu dapat diunduh sebagai .docx dari konten hasil edit.
 $isEdit = $isGenerate && $format === 'html' && ($_GET['edit'] ?? '') === '1';
 
-// ── Daftar Unit Kerja ─────────────────────────────────────────
-$unitKerjaList = [
+// ── Daftar Unit Kerja Standar ─────────────────────────────────
+$defaultUnitKerjaList = [
     'Sub Bagian Administrasi Umum',
     'Tim Kerja Program Layanan',
     'Tim Kerja Mutu, Penguatan SDM dan Kemitraan',
@@ -58,8 +58,174 @@ $unitKerjaList = [
     'Instalasi',
     'Gratifikasi',
 ];
+$unitKerjaList = $defaultUnitKerjaList;
 
 // ── Helper Functions ──────────────────────────────────────────
+
+/**
+ * Bersihkan nama unit kerja dari nomor urut/bullet di depan (misal: "3. Tim Kerja..." -> "Tim Kerja...").
+ */
+if (!function_exists('laporanCleanUnitName')) {
+    function laporanCleanUnitName(string $name): string {
+        $clean = preg_replace('/^\s*(\d+|[a-zA-Z])[\.\)]\s*/u', '', $name);
+        return trim($clean);
+    }
+}
+
+/**
+ * Resolusi prefix kode risiko (A, L, M, S, I, G) dari nama unit kerja.
+ * Tangguh terhadap variasi penamaan, nomor di depan, atau penamaan khusus di tabel bagian/users.
+ */
+if (!function_exists('laporanResolveUnitPrefix')) {
+    function laporanResolveUnitPrefix(?mysqli $db, string $unitKerja): string {
+        $clean = laporanCleanUnitName($unitKerja);
+
+        $prefixMap = [
+            'Sub Bagian Administrasi Umum'                          => 'A',
+            'Tim Kerja Program Layanan'                             => 'L',
+            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
+            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
+            'Instalasi'                                             => 'I',
+            'Gratifikasi'                                           => 'G',
+        ];
+
+        if (isset($prefixMap[$unitKerja])) {
+            return $prefixMap[$unitKerja];
+        }
+        if (isset($prefixMap[$clean])) {
+            return $prefixMap[$clean];
+        }
+
+        // Heuristik kata kunci (case-insensitive)
+        $lower = strtolower($unitKerja);
+        if (strpos($lower, 'administrasi') !== false || strpos($lower, 'adum') !== false) {
+            return 'A';
+        }
+        if (strpos($lower, 'layanan') !== false || strpos($lower, 'program') !== false) {
+            return 'L';
+        }
+        if (strpos($lower, 'mutu') !== false || strpos($lower, 'kemitraan') !== false || strpos($lower, 'sdm') !== false) {
+            return 'M';
+        }
+        if (strpos($lower, 'surveilans') !== false || strpos($lower, 'klb') !== false || strpos($lower, 'faktor risiko') !== false) {
+            return 'S';
+        }
+        if (strpos($lower, 'instalasi') !== false) {
+            return 'I';
+        }
+        if (strpos($lower, 'gratifikasi') !== false || strpos($lower, 'upg') !== false) {
+            return 'G';
+        }
+
+        // Cek prefix huruf langsung di depan nama (misal: "A. ..." atau "M - ...")
+        if (preg_match('/^([ALMSIG])[\.\s\-]/i', $unitKerja, $m)) {
+            return strtoupper($m[1]);
+        }
+
+        // Cek referensi user di tabel users jika koneksi DB tersedia
+        if ($db) {
+            $stmt = $db->prepare("
+                SELECT u.kode_prefix 
+                FROM users u 
+                INNER JOIN bagian b ON b.id = u.bagian_id 
+                WHERE (b.nama = ? OR b.nama = ?) AND u.kode_prefix IS NOT NULL AND u.kode_prefix <> '' 
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('ss', $unitKerja, $clean);
+                $stmt->execute();
+                $p = $stmt->get_result()->fetch_column();
+                $stmt->close();
+                if ($p && in_array(strtoupper((string)$p), ['A', 'L', 'M', 'S', 'I', 'G'], true)) {
+                    return strtoupper((string)$p);
+                }
+            }
+        }
+
+        return '';
+    }
+}
+
+/**
+ * Ambil daftar unit kerja secara dinamis dari tabel bagian database.
+ * Jika tabel belum ada atau kosong, fallback ke 6 unit kerja standar.
+ */
+if (!function_exists('laporanGetUnitKerjaList')) {
+    function laporanGetUnitKerjaList(?mysqli $db): array {
+        global $defaultUnitKerjaList;
+        $defaultUnits = $defaultUnitKerjaList ?? [
+            'Sub Bagian Administrasi Umum',
+            'Tim Kerja Program Layanan',
+            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan',
+            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB',
+            'Instalasi',
+            'Gratifikasi',
+        ];
+
+        if (!$db) {
+            return $defaultUnits;
+        }
+
+        $res = $db->query("SELECT nama FROM bagian WHERE aktif = 1 ORDER BY id ASC");
+        if (!$res || $res->num_rows === 0) {
+            return $defaultUnits;
+        }
+
+        $dbUnits = [];
+        while ($row = $res->fetch_assoc()) {
+            $nama = trim((string)$row['nama']);
+            if ($nama === '') {
+                continue;
+            }
+            // Filter unit non-risiko (misal Koordinator Manajemen Risiko atau Pimpinan)
+            $prefix = laporanResolveUnitPrefix($db, $nama);
+            if ($prefix !== '') {
+                $dbUnits[] = $nama;
+            }
+        }
+
+        if (empty($dbUnits)) {
+            return $defaultUnits;
+        }
+
+        // Pastikan seluruh 6 unit standar tetap terwakili jika user baru menginput sebagian
+        $coveredPrefixes = [];
+        foreach ($dbUnits as $u) {
+            $p = laporanResolveUnitPrefix($db, $u);
+            if ($p !== '') {
+                $coveredPrefixes[$p] = true;
+            }
+        }
+
+        $prefixOrder = ['A' => 1, 'L' => 2, 'M' => 3, 'S' => 4, 'I' => 5, 'G' => 6];
+
+        $finalUnits = $dbUnits;
+        foreach ($defaultUnits as $def) {
+            $p = laporanResolveUnitPrefix($db, $def);
+            if (!isset($coveredPrefixes[$p])) {
+                $finalUnits[] = $def;
+                $coveredPrefixes[$p] = true;
+            }
+        }
+
+        // Urutkan finalUnits berdasarkan nomor eksplisit (1., 2.) atau urutan standar prefix
+        usort($finalUnits, function ($a, $b) use ($db, $prefixOrder) {
+            preg_match('/^(\d+)[\.\)]/u', $a, $ma);
+            preg_match('/^(\d+)[\.\)]/u', $b, $mb);
+            if (!empty($ma[1]) && !empty($mb[1])) {
+                return (int)$ma[1] <=> (int)$mb[1];
+            }
+
+            $pa = laporanResolveUnitPrefix($db, $a);
+            $pb = laporanResolveUnitPrefix($db, $b);
+            $oa = $prefixOrder[$pa] ?? 99;
+            $ob = $prefixOrder[$pb] ?? 99;
+            return $oa <=> $ob;
+        });
+
+        return $finalUnits;
+    }
+}
 
 /**
  * Warna latar belakang sel tingkat risiko (konsisten dengan kkpr.php).
@@ -250,17 +416,10 @@ if (!function_exists('laporanSanitizeDraftHtml')) {
  */
 if (!function_exists('laporanGetDataUnit')) {
     function laporanGetDataUnit(mysqli $db, string $unitKerja, string $tahun, int $triwulan): array {
-        $prefixMap = [
-            'Sub Bagian Administrasi Umum'                          => 'A',
-            'Tim Kerja Program Layanan'                             => 'L',
-            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
-            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
-            'Instalasi'                                             => 'I',
-            'Gratifikasi'                                           => 'G',
-        ];
-
-        $prefix = $prefixMap[$unitKerja] ?? '';
-        $unitLike = '%' . $unitKerja . '%';
+        $prefix = laporanResolveUnitPrefix($db, $unitKerja);
+        $cleanUnit = laporanCleanUnitName($unitKerja);
+        $unitLike = '%' . $cleanUnit . '%';
+        $rawUnitLike = '%' . $unitKerja . '%';
 
         $prevTriwulan = $triwulan - 1;
         if ($prefix !== '') {
@@ -286,11 +445,11 @@ if (!function_exists('laporanGetDataUnit')) {
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
                     LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
                     WHERE h.tahun = ?
-                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('iissss', $prevTriwulan, $triwulan, $tahun, $prefixPattern, $prefix, $unitLike);
+                $stmt->bind_param('iisssss', $prevTriwulan, $triwulan, $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike);
             } else {
                 $sql = "
                     SELECT
@@ -311,11 +470,11 @@ if (!function_exists('laporanGetDataUnit')) {
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
                     WHERE h.tahun = ?
-                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('issss', $triwulan, $tahun, $prefixPattern, $prefix, $unitLike);
+                $stmt->bind_param('isssss', $triwulan, $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike);
             }
         } else {
             if ($triwulan > 1) {
@@ -339,11 +498,11 @@ if (!function_exists('laporanGetDataUnit')) {
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
                     LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
                     WHERE h.tahun = ?
-                      AND h.unit_pemilik_risiko LIKE ?
+                      AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('iiss', $prevTriwulan, $triwulan, $tahun, $unitLike);
+                $stmt->bind_param('iisss', $prevTriwulan, $triwulan, $tahun, $unitLike, $rawUnitLike);
             } else {
                 $sql = "
                     SELECT
@@ -364,11 +523,11 @@ if (!function_exists('laporanGetDataUnit')) {
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
                     WHERE h.tahun = ?
-                      AND h.unit_pemilik_risiko LIKE ?
+                      AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('iss', $triwulan, $tahun, $unitLike);
+                $stmt->bind_param('isss', $triwulan, $tahun, $unitLike, $rawUnitLike);
             }
         }
 
@@ -390,17 +549,10 @@ if (!function_exists('laporanGetAggregat')) {
             return [];
         }
 
-        $prefixMap = [
-            'Sub Bagian Administrasi Umum'                          => 'A',
-            'Tim Kerja Program Layanan'                             => 'L',
-            'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
-            'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
-            'Instalasi'                                             => 'I',
-            'Gratifikasi'                                           => 'G',
-        ];
-
-        $prefix = $prefixMap[$unitKerja] ?? '';
-        $unitLike = '%' . $unitKerja . '%';
+        $prefix = laporanResolveUnitPrefix($db, $unitKerja);
+        $cleanUnit = laporanCleanUnitName($unitKerja);
+        $unitLike = '%' . $cleanUnit . '%';
+        $rawUnitLike = '%' . $unitKerja . '%';
 
         if ($prefix !== '') {
             $prefixPattern = $prefix . '.%';
@@ -410,7 +562,7 @@ if (!function_exists('laporanGetAggregat')) {
                 INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
                 INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                 WHERE h.tahun = ?
-                  AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ?)
+                  AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                   AND m.triwulan = ?
                   AND m.{$kolom} IS NOT NULL
                   AND m.{$kolom} <> ''
@@ -418,7 +570,7 @@ if (!function_exists('laporanGetAggregat')) {
                 ORDER BY m.{$kolom}
             ";
             $stmt = $db->prepare($sql);
-            $stmt->bind_param('ssssi', $tahun, $prefixPattern, $prefix, $unitLike, $triwulan);
+            $stmt->bind_param('sssssi', $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike, $triwulan);
         } else {
             $sql = "
                 SELECT DISTINCT m.{$kolom}
@@ -426,7 +578,7 @@ if (!function_exists('laporanGetAggregat')) {
                 INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
                 INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                 WHERE h.tahun = ?
-                  AND h.unit_pemilik_risiko LIKE ?
+                  AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                   AND m.triwulan = ?
                   AND m.{$kolom} IS NOT NULL
                   AND m.{$kolom} <> ''
@@ -434,7 +586,7 @@ if (!function_exists('laporanGetAggregat')) {
                 ORDER BY m.{$kolom}
             ";
             $stmt = $db->prepare($sql);
-            $stmt->bind_param('ssi', $tahun, $unitLike, $triwulan);
+            $stmt->bind_param('sssi', $tahun, $unitLike, $rawUnitLike, $triwulan);
         }
 
         $stmt->execute();
@@ -887,6 +1039,7 @@ if ($isGenerate && $format === 'docx') {
     // ══ BAB II: PELAKSANAAN PENGENDALIAN RISIKO ═══════════════
     $db = getDB();
     $allUnitData = [];
+    $unitKerjaList = laporanGetUnitKerjaList($db);
 
     $section->addText('BAB II', $fTitle, $pHeading);
     $section->addText('PELAKSANAAN PENGENDALIAN RISIKO', $fTitle, $pHeading);
@@ -900,9 +1053,10 @@ if ($isGenerate && $format === 'docx') {
         $allUnitData[$unitIdx] = $rows;
         $unitNo = $unitIdx + 1;
         $huruf  = $unitHuruf[$unitIdx] ?? (string)$unitNo;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
 
-        $section->addText($huruf . '. ' . $unitKerja, $fBold, ['spaceBefore' => 200, 'spaceAfter' => 40]);
-        $section->addText('Tabel ' . $unitNo . '. Hasil Monev Risiko ' . $unitKerja . ' Triwulan ' . $triwulan . ' Tahun ' . $tahun, ['italic' => true, 'size' => 10], ['spaceBefore' => 20, 'spaceAfter' => 80]);
+        $section->addText($huruf . '. ' . $cleanUnitKerja, $fBold, ['spaceBefore' => 200, 'spaceAfter' => 40]);
+        $section->addText('Tabel ' . $unitNo . '. Hasil Monev Risiko ' . $cleanUnitKerja . ' Triwulan ' . $triwulan . ' Tahun ' . $tahun, ['italic' => true, 'size' => 10], ['spaceBefore' => 20, 'spaceAfter' => 80]);
 
         $table = $section->addTable(['borderSize' => 4, 'borderColor' => '000000', 'width' => 100, 'unit' => 'pct', 'cellMargin' => 40]);
 
@@ -983,10 +1137,11 @@ if ($isGenerate && $format === 'docx') {
 
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $unitNo      = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $rawKendala  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
         $kendalaList = laporanPecahItemDaftar($rawKendala);
 
-        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $cleanUnitKerja, $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
         if (empty($kendalaList)) {
             $section->addText('Tidak ditemukan kendala dalam pelaksanaan kegiatan.', null, $pJustify);
         } else {
@@ -1006,9 +1161,10 @@ if ($isGenerate && $format === 'docx') {
     $section->addText('A. KESIMPULAN', $fBold, ['spaceBefore' => 160, 'spaceAfter' => 80]);
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $unitNo = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $stat   = laporanHitungStatistik($allUnitData[$unitIdx] ?? []);
 
-        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $cleanUnitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
         if ($stat['total_monev'] === 0) {
             $section->addText('Belum terdapat data monitoring dan evaluasi untuk unit kerja ini pada periode yang dipilih.', null, $pJustify);
         } else {
@@ -1031,10 +1187,11 @@ if ($isGenerate && $format === 'docx') {
 
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
         $unitNo  = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $rawRtl  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
         $rtlList = laporanPecahItemDaftar($rawRtl);
 
-        $section->addText($unitNo . '. ' . $unitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
+        $section->addText($unitNo . '. ' . $cleanUnitKerja, $fBold, ['spaceBefore' => 120, 'spaceAfter' => 80]);
         if (empty($rtlList)) {
             $section->addText('Rencana Tindak Lanjut yang akan dilakukan adalah melanjutkan upaya pengendalian yang sudah direncanakan.', null, $pJustify);
         } else {
@@ -1077,6 +1234,7 @@ if ($isGenerate) {
     // Cek apakah ada draft laporan yang tersimpan di database
     $db = getDB();
     laporanEnsureDraftTable($db);
+    $unitKerjaList = laporanGetUnitKerjaList($db);
 
     $draftRow = null;
     $ignoreDraft = ($_GET['ignore_draft'] ?? '') === '1';
@@ -1943,6 +2101,7 @@ if ($isGenerate) {
 <?php
     // ── BAB II: Pelaksanaan Pengendalian Risiko Per Unit Kerja ──
     $db = getDB();
+    $unitKerjaList = laporanGetUnitKerjaList($db);
     ?>
 
     <!-- ── BAB II ─────────────────────────────────────────────── -->
@@ -1957,9 +2116,10 @@ if ($isGenerate) {
         $allUnitData[$unitIdx] = $rows;
         $unitNo = $unitIdx + 1;
         $huruf  = $unitLetters[$unitIdx] ?? (string)$unitNo;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
 ?>
-      <h3 class="subbab-heading"><?= $huruf ?>. <?= xss($unitKerja) ?></h3>
-      <p class="table-caption" style="font-style:italic; margin-bottom:8px; font-size:10pt; text-indent:0;">Tabel <?= $unitNo ?>. Hasil Monev Risiko <?= xss($unitKerja) ?> Triwulan <?= $triwulan ?> Tahun <?= xss($tahun) ?></p>
+      <h3 class="subbab-heading"><?= $huruf ?>. <?= xss($cleanUnitKerja) ?></h3>
+      <p class="table-caption" style="font-style:italic; margin-bottom:8px; font-size:10pt; text-indent:0;">Tabel <?= $unitNo ?>. Hasil Monev Risiko <?= xss($cleanUnitKerja) ?> Triwulan <?= $triwulan ?> Tahun <?= xss($tahun) ?></p>
 
       <table class="laporan-table">
         <colgroup>
@@ -2074,10 +2234,11 @@ if ($isGenerate) {
 <?php
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
         $unitNo      = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $rawKendala  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'kendala');
         $kendalaList = laporanPecahItemDaftar($rawKendala);
 ?>
-      <h3 class="subbab-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h3>
+      <h3 class="subbab-heading"><?= $unitNo ?>. <?= xss($cleanUnitKerja) ?></h3>
 
 <?php if (empty($kendalaList)): ?>
       <p>Tidak ditemukan kendala dalam pelaksanaan kegiatan.</p>
@@ -2104,10 +2265,11 @@ if ($isGenerate) {
 <?php
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
         $unitNo   = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $rowsBab4 = $allUnitData[$unitIdx] ?? [];
         $stat     = laporanHitungStatistik($rowsBab4);
 ?>
-      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
+      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($cleanUnitKerja) ?></h4>
 
 <?php if ($stat['total_monev'] === 0): ?>
       <p>Belum terdapat data monitoring dan evaluasi untuk unit kerja ini pada periode yang dipilih.</p>
@@ -2129,10 +2291,11 @@ if ($isGenerate) {
 <?php
     foreach ($unitKerjaList as $unitIdx => $unitKerja):
         $unitNo  = $unitIdx + 1;
+        $cleanUnitKerja = laporanCleanUnitName($unitKerja);
         $rawRtl  = laporanGetAggregat($db, $unitKerja, $tahun, $triwulan, 'rencana_tindak_lanjut');
         $rtlList = laporanPecahItemDaftar($rawRtl);
 ?>
-      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($unitKerja) ?></h4>
+      <h4 class="unit-heading"><?= $unitNo ?>. <?= xss($cleanUnitKerja) ?></h4>
 
 <?php if (empty($rtlList)): ?>
       <p>Rencana Tindak Lanjut yang akan dilakukan adalah melanjutkan upaya pengendalian yang sudah direncanakan.</p>

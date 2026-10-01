@@ -115,7 +115,7 @@ class AuthTest extends TestCase
     {
         if (session_status() === PHP_SESSION_NONE) session_start();
 
-        foreach (['Admin', 'Risk Manager', 'Pimpinan', 'Kepala'] as $role) {
+        foreach (['Admin', 'Risk Manager', 'Pimpinan', 'Kepala', 'Koordinator'] as $role) {
             $_SESSION['user_role'] = $role;
             $this->assertTrue(canManageBackup(), "Role {$role} should be allowed to manage backup & restore");
         }

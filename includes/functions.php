@@ -184,7 +184,7 @@ function canAccessAllRecords(): bool {
 /** Cek apakah user berhak mengakses dan mengelola fitur backup & restore (Admin, Risk Manager, Pimpinan/Kepala). */
 if (!function_exists('canManageBackup')) {
     function canManageBackup(): bool {
-        return hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala');
+        return hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala', 'Koordinator') || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator');
     }
 }
 

@@ -62,7 +62,10 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
     </a>
     <?php endif; ?>
 
-    <?php $isRiskGroupActive = in_array($currentPage, ['risiko', 'mitigasi', 'profil_risiko', 'kkpr', 'kkpmr', 'ikk']); ?>
+    <?php 
+    $isKoordinatorUser = hasRole('Koordinator') || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator');
+    $isRiskGroupActive = in_array($currentPage, ['risiko', 'mitigasi', 'profil_risiko', 'kkpr', 'kkpmr', 'ikk']); 
+    ?>
     <div class="nav-group <?= $isRiskGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isRiskGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isRiskGroupActive ? 'true' : 'false' ?>">
         <span class="nav-group-label">
@@ -81,12 +84,12 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
         <a href="<?= APP_URL ?>/?page=kkpr" class="nav-item <?= $currentPage==='kkpr'?'active':'' ?>">
           <i class="fas fa-clipboard-list"></i><span>Kertas Kerja Penilaian Risiko</span>
         </a>
-         <?php if (hasRole('Admin','Risk Manager','Pimpinan')): ?>
+         <?php if (hasRole('Admin','Risk Manager','Pimpinan','Koordinator') || $isKoordinatorUser): ?>
           <a href="<?= APP_URL ?>/?page=kkpmr" class="nav-item <?= $currentPage==='kkpmr'?'active':'' ?>">
             <i class="fas fa-search-plus"></i><span>Kertas Kerja Pemantauan &amp; Reviu</span>
           </a>
          <?php endif; ?>
-         <?php if (hasRole('Admin','Risk Manager')): ?>
+         <?php if (hasRole('Admin','Risk Manager','Koordinator') || $isKoordinatorUser): ?>
         <a href="<?= APP_URL ?>/?page=ikk" class="nav-item <?= $currentPage==='ikk'?'active':'' ?>">
           <i class="fas fa-clipboard-check"></i><span>Kertas Kerja IKK</span>
         </a>
@@ -140,7 +143,7 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
     </div>
     <?php endif; ?>
     
-    <?php if (hasRole('Admin')): ?>
+    <?php if (hasRole('Admin') && !$isKoordinatorUser): ?>
     <?php $isMasterGroupActive = in_array($currentPage, ['master_indikator', 'kategori', 'saran_mitigasi']); ?>
     <div class="nav-group <?= $isMasterGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isMasterGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isMasterGroupActive ? 'true' : 'false' ?>">
@@ -167,7 +170,7 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
     </div>
     <?php endif; ?>
 
-    <?php if (hasRole('Admin')): ?>
+    <?php if (hasRole('Admin') && !$isKoordinatorUser): ?>
     <?php $isAdminGroupActive = in_array($currentPage, ['log', 'user', 'backup', 'bot_settings']); ?>
     <div class="nav-group <?= $isAdminGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isAdminGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isAdminGroupActive ? 'true' : 'false' ?>">
@@ -198,9 +201,10 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
     if (function_exists('canManageBackup')) {
         $canBackupNav = canManageBackup();
     } elseif (function_exists('hasRole')) {
-        $canBackupNav = hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala');
+        $canBackupNav = hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala', 'Koordinator');
     }
-    if (!hasRole('Admin') && $canBackupNav): ?>
+    $showStandaloneBackup = (!hasRole('Admin') || $isKoordinatorUser) && ($canBackupNav || $isKoordinatorUser);
+    if ($showStandaloneBackup): ?>
     <a href="<?= APP_URL ?>/?page=backup" class="nav-item <?= $currentPage==='backup'?'active':'' ?>">
       <i class="fas fa-database nav-icon-main"></i><span class="nav-text-main">Backup &amp; Restore</span>
     </a>

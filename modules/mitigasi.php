@@ -9,7 +9,7 @@ $db = getDB();
 // ── Handle POST ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf()) { setFlash('error','Token tidak valid'); header('Location: '.APP_URL.'/?page=mitigasi'); exit; }
-    requireRole('Admin','Risk Manager','Staff');
+    requireRole('Admin','Risk Manager','Staff','Koordinator');
 
     $aksi = $_POST['aksi'] ?? '';
 
@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setFlash('success','Mitigasi berhasil ditambahkan');
         }
     } elseif ($aksi === 'hapus') {
-        requireRole('Admin','Risk Manager');
+        requireRole('Admin','Risk Manager','Koordinator');
         $id = (int)($_POST['id'] ?? 0);
         $ownerSql = 'SELECT m.bukti_file, m.ttd_file, r.id_user_input FROM mitigasi m JOIN risiko r ON r.id=m.id_risiko WHERE m.id=?';
         $owner = $db->prepare($ownerSql);
@@ -153,16 +153,21 @@ $risikoId = (int)($_GET['risiko_id'] ?? 0);
 $saranAwal = xss($_GET['saran'] ?? '');
 $export = $_GET['export'] ?? '';
 
+// Cek hak akses melihat seluruh data (Admin, Pimpinan, Koordinator)
+$canAccessAll = hasRole('Admin', 'Pimpinan', 'Koordinator') 
+    || (function_exists('canAccessAllRecords') && canAccessAllRecords()) 
+    || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator');
+
 // Data risiko untuk dropdown (hanya risiko aktif, bukan yang terhapus)
 $mitigasi_cond = 'WHERE deleted_at IS NULL';
-if (!hasRole('Admin', 'Pimpinan')) $mitigasi_cond .= ' AND id_user_input = ' . (int)$_SESSION['user_id'];
+if (!$canAccessAll) $mitigasi_cond .= ' AND id_user_input = ' . (int)$_SESSION['user_id'];
 $risikoList = $db->query("SELECT id, kode_risiko, nama_risiko FROM risiko $mitigasi_cond ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
 
 $risikoDetail = null;
 $mitigasiRows = [];
 
 if ($risikoId) {
-    $scope = hasRole('Admin', 'Pimpinan') ? '' : ' AND r.id_user_input = ?';
+    $scope = $canAccessAll ? '' : ' AND r.id_user_input = ?';
     $s = $db->prepare('SELECT r.*, r.sumber AS kategori_nama FROM risiko r WHERE r.id=? AND r.deleted_at IS NULL'.$scope);
     if ($scope) { $uid = (int)$_SESSION['user_id']; $s->bind_param('ii',$risikoId,$uid); } else $s->bind_param('i',$risikoId);
     $s->execute();
@@ -173,13 +178,12 @@ if ($risikoId) {
     $mitigasiRows = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 } else {
     $mitigasi_cond_and = 'WHERE r.deleted_at IS NULL';
-    if (!hasRole('Admin', 'Pimpinan')) $mitigasi_cond_and .= ' AND r.id_user_input = ' . (int)$_SESSION['user_id'];
+    if (!$canAccessAll) $mitigasi_cond_and .= ' AND r.id_user_input = ' . (int)$_SESSION['user_id'];
     $mitigasiRows = $db->query("
         SELECT m.*, r.nama_risiko, r.kode_risiko, r.level_risiko
         FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id
         $mitigasi_cond_and
         ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.kode_risiko ASC, m.deadline ASC
-        LIMIT 200
     ")->fetch_all(MYSQLI_ASSOC) ?: [];
 }
 
@@ -357,7 +361,7 @@ tr:nth-child(even) td{background:#f8fafc}
 $statMitSql = "SELECT COUNT(*) as total, 
     SUM(IF(m.progress >= 100, 1, 0)) as selesai, 
     SUM(IF(m.progress < 100 AND m.deadline < CURDATE(), 1, 0)) as terlambat 
-    FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id $mitigasi_cond";
+    FROM mitigasi m JOIN risiko r ON m.id_risiko=r.id " . ($canAccessAll ? 'WHERE r.deleted_at IS NULL' : 'WHERE r.deleted_at IS NULL AND r.id_user_input = ' . (int)$_SESSION['user_id']);
 $statMitRes = $db->query($statMitSql)->fetch_assoc();
 $mitTotal = (int)$statMitRes['total'];
 $mitSelesai = (int)$statMitRes['selesai'];

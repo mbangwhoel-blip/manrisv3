@@ -109,4 +109,46 @@ class LaporanMonevBab2Bab4Test extends TestCase
         $file = file_get_contents(__DIR__ . '/../modules/laporan_monev_html_to_docx.php');
         $this->assertStringContainsString("'firstLine' => 720", $file);
     }
+
+    public function testCleanUnitNameAndPrefixResolution(): void
+    {
+        // Helper clean unit name
+        $clean1 = preg_replace('/^\s*(\d+|[a-zA-Z])[\.\)]\s*/u', '', '3. Tim Kerja Mutu, Penguatan SDM dan Kemitraan');
+        $this->assertSame('Tim Kerja Mutu, Penguatan SDM dan Kemitraan', trim($clean1));
+
+        $clean2 = preg_replace('/^\s*(\d+|[a-zA-Z])[\.\)]\s*/u', '', '1. Sub Bagian Administrasi Umum');
+        $this->assertSame('Sub Bagian Administrasi Umum', trim($clean2));
+
+        // Prefix map and keyword heuristic matching
+        $resolve = function (string $unit): string {
+            $c = trim(preg_replace('/^\s*(\d+|[a-zA-Z])[\.\)]\s*/u', '', $unit));
+            $map = [
+                'Sub Bagian Administrasi Umum'                          => 'A',
+                'Tim Kerja Program Layanan'                             => 'L',
+                'Tim Kerja Mutu, Penguatan SDM dan Kemitraan'          => 'M',
+                'Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB' => 'S',
+                'Instalasi'                                             => 'I',
+                'Gratifikasi'                                           => 'G',
+            ];
+            if (isset($map[$unit])) return $map[$unit];
+            if (isset($map[$c])) return $map[$c];
+            $l = strtolower($unit);
+            if (str_contains($l, 'administrasi') || str_contains($l, 'adum')) return 'A';
+            if (str_contains($l, 'layanan') || str_contains($l, 'program')) return 'L';
+            if (str_contains($l, 'mutu') || str_contains($l, 'kemitraan') || str_contains($l, 'sdm')) return 'M';
+            if (str_contains($l, 'surveilans') || str_contains($l, 'klb')) return 'S';
+            if (str_contains($l, 'instalasi')) return 'I';
+            if (str_contains($l, 'gratifikasi') || str_contains($l, 'upg')) return 'G';
+            return '';
+        };
+
+        $this->assertSame('M', $resolve('3. Tim Kerja Mutu, Penguatan SDM dan Kemitraan'));
+        $this->assertSame('A', $resolve('Sub Bagian Administrasi Umum'));
+        $this->assertSame('L', $resolve('Tim Kerja Program Layanan'));
+        $this->assertSame('S', $resolve('Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB'));
+        $this->assertSame('I', $resolve('Instalasi'));
+        $this->assertSame('G', $resolve('Gratifikasi'));
+        $this->assertSame('G', $resolve('Unit Pengendali Gratifikasi (UPG)'));
+        $this->assertSame('', $resolve('Koordinator Manajemen Risiko'));
+    }
 }

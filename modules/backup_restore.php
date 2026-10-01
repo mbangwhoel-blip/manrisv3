@@ -9,11 +9,11 @@ requireLogin();
 // Fallback jika canManageBackup belum terdefinisi di functions.php
 if (!function_exists('canManageBackup')) {
     function canManageBackup(): bool {
-        return function_exists('hasRole') && hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala');
+        return function_exists('hasRole') && (hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala', 'Koordinator') || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator'));
     }
 }
 
-requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala');
+requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Kepala', 'Koordinator');
 $db = getDB();
 
 $currentUid      = (int)($_SESSION['user_id'] ?? 0);

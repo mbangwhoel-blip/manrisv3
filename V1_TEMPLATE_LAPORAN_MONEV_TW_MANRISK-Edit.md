@@ -223,31 +223,35 @@ Dalam pelaksanaan pengendalian risiko pada <mark>Triwulan II</mark> Tahun <mark>
 
 3. **Tim Kerja Mutu, Penguatan SDM dan Kemitraan**
 
-   a. Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak <mark>......</mark> risiko
-   b. Jumlah risiko dengan tingkat risiko tetap sebanyak <mark>......</mark> risiko
-   c. Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak <mark>......</mark> risiko
-   d. Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi ........ risiko
+   a. Jumlah risiko dengan tingkat risiko “Sangat Tinggi” sebanyak <mark>......</mark> risiko
+   b. Jumlah risiko dengan tingkat risiko “Tinggi” sebanyak <mark>......</mark> risiko
+   c. Jumlah risiko dengan tingkat risiko “Sedang” sebanyak <mark>......</mark> risiko
+   d. Jumlah risiko dengan tingkat risiko “Rendah” sebanyak <mark>......</mark> risiko
+   e. Jumlah risiko dengan tingkat risiko “Sangat Rendah” sebanyak <mark>......</mark> risiko
 
 4. **Tim Kerja Surveilans Penyakit, Faktor Risiko, dan KLB**
 
-   a. Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak <mark>......</mark> risiko
-   b. Jumlah risiko dengan tingkat risiko tetap sebanyak <mark>......</mark> risiko
-   c. Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak <mark>......</mark> risiko
-   d. Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi ........ risiko
+   a. Jumlah risiko dengan tingkat risiko “Sangat Tinggi” sebanyak <mark>......</mark> risiko
+   b. Jumlah risiko dengan tingkat risiko “Tinggi” sebanyak <mark>......</mark> risiko
+   c. Jumlah risiko dengan tingkat risiko “Sedang” sebanyak <mark>......</mark> risiko
+   d. Jumlah risiko dengan tingkat risiko “Rendah” sebanyak <mark>......</mark> risiko
+   e. Jumlah risiko dengan tingkat risiko “Sangat Rendah” sebanyak <mark>......</mark> risiko
 
 5. **Instalasi**
 
-   a. Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak <mark>......</mark> risiko
-   b. Jumlah risiko dengan tingkat risiko tetap sebanyak <mark>......</mark> risiko
-   c. Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak <mark>......</mark> risiko
-   d. Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi ........ risiko
+   a. Jumlah risiko dengan tingkat risiko “Sangat Tinggi” sebanyak <mark>......</mark> risiko
+   b. Jumlah risiko dengan tingkat risiko “Tinggi” sebanyak <mark>......</mark> risiko
+   c. Jumlah risiko dengan tingkat risiko “Sedang” sebanyak <mark>......</mark> risiko
+   d. Jumlah risiko dengan tingkat risiko “Rendah” sebanyak <mark>......</mark> risiko
+   e. Jumlah risiko dengan tingkat risiko “Sangat Rendah” sebanyak <mark>......</mark> risiko
 
 6. **Gratifikasi**
 
-   a. Jumlah risiko yang mengalami penurunan tingkat risiko sebanyak <mark>......</mark> risiko
-   b. Jumlah risiko dengan tingkat risiko tetap sebanyak <mark>......</mark> risiko
-   c. Jumlah risiko yang mengalami peningkatan tingkat risiko sebanyak <mark>......</mark> risiko
-   d. Jumlah risiko dengan tingkat risiko tinggi dan sangat tinggi ........ risiko
+   a. Jumlah risiko dengan tingkat risiko “Sangat Tinggi” sebanyak <mark>......</mark> risiko
+   b. Jumlah risiko dengan tingkat risiko “Tinggi” sebanyak <mark>......</mark> risiko
+   c. Jumlah risiko dengan tingkat risiko “Sedang” sebanyak <mark>......</mark> risiko
+   d. Jumlah risiko dengan tingkat risiko “Rendah” sebanyak <mark>......</mark> risiko
+   e. Jumlah risiko dengan tingkat risiko “Sangat Rendah” sebanyak <mark>......</mark> risiko
 
 ### B. RENCANA TINDAK LANJUT
 
