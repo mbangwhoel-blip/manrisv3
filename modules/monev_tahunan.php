@@ -688,7 +688,8 @@ $efektifBadge = function (?string $e): string {
       </div>
       <div class="datatable-dropdown" style="margin:0;display:flex;align-items:center">
         <select class="datatable-selector" id="limitMonevTahunan">
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="15">15</option>
           <option value="25">25</option>
           <option value="50">50</option>
@@ -937,8 +938,8 @@ $efektifBadge = function (?string $e): string {
   /* ── Multi-row Sticky Table Header (Sejajar Sempurna untuk Status & Aksi) ── */
   .monev-scroll-wrap {
     overflow-x: auto;
-    overflow-y: auto;
-    max-height: 65vh;
+    overflow-y: visible;
+    max-height: none;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     scrollbar-width: thin;
@@ -1806,7 +1807,7 @@ $efektifBadge = function (?string $e): string {
 
 <script>
 // ── Filter + pagination tabel ────────────────────────────────
-window.monevTableState = { q: '', unit: '', filter: 'all', level: '', page: 1, size: 10 };
+window.monevTableState = { q: '', unit: '', filter: 'all', level: '', page: 1, size: 5 };
 const monevTableState = window.monevTableState;
 const filterLabels = { terisi: 'Sudah dipantau', belum: 'Belum dipantau', efektif: 'Efektif', eskalasi: 'Eskalasi', penurunan: 'Penurunan' };
 
@@ -1950,7 +1951,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 200);
   });
   document.getElementById('limitMonevTahunan').addEventListener('change', function () {
-    monevTableState.size = parseInt(this.value, 10) || 10;
+    monevTableState.size = parseInt(this.value, 10) || 5;
     monevTableState.page = 1;
     applyMonevTable();
   });

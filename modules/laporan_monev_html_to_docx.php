@@ -92,7 +92,7 @@ final class LaporanMonevWalker
     private const AREA_TWIPS = 9355; // lebar area cetak A4 setelah margin
 
     /** Skema lebar kolom untuk tabel laporan 12 kolom (No,Kode,Pernyataan,P,D,Nilai,Tingkat,Upaya,P,D,Nilai,Tingkat) */
-    private const TABLE_LAPORAN_WIDTHS = [350, 850, 2000, 280, 280, 400, 950, 1700, 280, 280, 400, 950];
+    private const TABLE_LAPORAN_WIDTHS = [350, 850, 2000, 250, 250, 460, 950, 1700, 250, 250, 460, 950];
 
     private \PhpOffice\PhpWord\Element\Section $section;
     private int $blockIndex = 0;

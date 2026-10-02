@@ -100,7 +100,7 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
       </div>
     </div>
     
-    <?php $isMonevGroupActive = in_array($currentPage, ['monev_triwulan', 'monev_tahunan', 'monev_konsolidasi']); ?>
+    <?php $isMonevGroupActive = in_array($currentPage, ['monev_triwulan', 'monev_tahunan', 'monev_konsolidasi', 'laporan_monev']); ?>
     <div class="nav-group <?= $isMonevGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isMonevGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isMonevGroupActive ? 'true' : 'false' ?>">
         <span class="nav-group-label">
@@ -115,16 +115,21 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
           <i class="fas fa-calendar-check"></i><span>Monev Triwulan &amp; Tahunan</span>
         </a>
         <?php endif; ?>
-        <?php if (hasRole('Admin','Kepala','Pimpinan','Koordinator')): ?>
+        <?php if (hasRole('Admin','Risk Manager','Kepala','Pimpinan','Koordinator') || $isKoordinatorUser): ?>
+        <a href="<?= APP_URL ?>/?page=laporan_monev" class="nav-item <?= $currentPage==='laporan_monev'?'active':'' ?>">
+          <i class="fas fa-file-medical-alt"></i><span>Modul Laporan Monev Manajemen Risiko</span>
+        </a>
+        <?php endif; ?>
+        <?php if (hasRole('Admin','Kepala','Pimpinan','Koordinator') || $isKoordinatorUser): ?>
         <a href="<?= APP_URL ?>/?page=monev_konsolidasi" class="nav-item <?= $currentPage==='monev_konsolidasi'?'active':'' ?>">
-          <i class="fas fa-layer-group"></i><span>Laporan Konsolidasi Monev</span>
+          <i class="fas fa-layer-group"></i><span>Laporan Keseluruhan Monev</span>
         </a>
         <?php endif; ?>
       </div>
     </div>
     
     <?php if (hasRole('Admin','Risk Manager','Pimpinan','Koordinator')): ?>
-    <?php $isLaporanGroupActive = in_array($currentPage, ['laporan_konsolidasi', 'laporan_monev']); ?>
+    <?php $isLaporanGroupActive = in_array($currentPage, ['laporan_konsolidasi']); ?>
     <div class="nav-group <?= $isLaporanGroupActive ? 'is-active' : '' ?>">
       <button type="button" class="nav-group-title js-nav-group-toggle <?= $isLaporanGroupActive ? 'expanded' : '' ?>" aria-expanded="<?= $isLaporanGroupActive ? 'true' : 'false' ?>">
         <span class="nav-group-label">
@@ -134,10 +139,7 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
       </button>
       <div class="nav-group-items <?= $isLaporanGroupActive ? 'show' : '' ?>">
         <a href="<?= APP_URL ?>/?page=laporan_konsolidasi" class="nav-item <?= $currentPage==='laporan_konsolidasi'?'active':'' ?>">
-          <i class="fas fa-layer-group"></i><span>Laporan Konsolidasi</span>
-        </a>
-        <a href="<?= APP_URL ?>/?page=laporan_monev" class="nav-item <?= $currentPage==='laporan_monev'?'active':'' ?>">
-          <i class="fas fa-file-medical-alt"></i><span>Laporan Monev Manajemen Risiko</span>
+          <i class="fas fa-layer-group"></i><span>Laporan Keseluruhan</span>
         </a>
       </div>
     </div>

@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    SISTEM MANAJEMEN RISIKO — MAIN CSS
    Theme: Corporate Blue + Silver Premium
    ============================================================ */
@@ -1974,7 +1974,7 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
 .monev-kondisi .sub{font-size:.64rem;color:var(--text-muted)}
 
 /* ── Scroll wrap: sticky header fungsional ─────────────────── */
-.monev-scroll-wrap{max-height:62vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm)}
+.monev-scroll-wrap{max-height:none;overflow-x:auto;overflow-y:visible;border:1px solid var(--border);border-radius:var(--radius-sm)}
 .monev-scroll-wrap table{margin-bottom:0}
 .monev-scroll-wrap thead th{position:sticky;top:0;z-index:5;background:var(--surface2);box-shadow:inset 0 -2px 0 var(--border)}
 .dark-mode .monev-scroll-wrap thead th{background:#1a2436}

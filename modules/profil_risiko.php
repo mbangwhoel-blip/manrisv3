@@ -1261,8 +1261,8 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         <?php endif; ?>
         <div class="datatable-dropdown" style="margin:0; display:flex; align-items:center;">
           <select class="datatable-selector" id="limitDetailRisiko" onchange="filterTableDetailRisiko()">
-            <option value="5">5</option>
-            <option value="10" selected>10</option>
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
             <option value="15">15</option>
             <option value="20">20</option>
             <option value="25">25</option>
@@ -2459,10 +2459,10 @@ async function copyHeaderToProfil() {
 }
 loadKkprListForCopy();
 
-const prState = { page: 1, lastQuery: '', lastLimit: 10 };
+const prState = { page: 1, lastQuery: '', lastLimit: 5 };
 function filterTableDetailRisiko() {
   const query = (document.getElementById('searchDetailRisiko')?.value || '').toLowerCase();
-  const limit = parseInt(document.getElementById('limitDetailRisiko')?.value || 10, 10);
+  const limit = parseInt(document.getElementById('limitDetailRisiko')?.value || 5, 10);
   if (query !== prState.lastQuery || limit !== prState.lastLimit) {
     prState.page = 1;
     prState.lastQuery = query;

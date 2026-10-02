@@ -1189,8 +1189,8 @@ $approvalBadge = match($approvalStatus) {
     </div>
       <div class="datatable-dropdown" style="margin:0; display:flex; align-items:center;">
       <select class="datatable-selector" id="limitLaporanKonsol" onchange="filterTableLaporanKonsol()">
-        <option value="5">5</option>
-        <option value="10" selected>10</option>
+        <option value="5" selected>5</option>
+        <option value="10">10</option>
         <option value="15">15</option>
         <option value="20">20</option>
         <option value="25">25</option>
@@ -1299,7 +1299,7 @@ let emptyRowKonsol = null;
 
 function filterTableLaporanKonsol() {
   const query = (document.getElementById('searchLaporanKonsol')?.value || '').toLowerCase();
-  const limit = parseInt(document.getElementById('limitLaporanKonsol')?.value || 10, 10);
+  const limit = parseInt(document.getElementById('limitLaporanKonsol')?.value || 5, 10);
   const allRows = [...document.querySelectorAll('#tableLaporanKonsol tbody tr:not(.empty-state-row)')];
   
   const visible = allRows.filter(row => {

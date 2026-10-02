@@ -457,7 +457,8 @@ if (window.simpleDatatables?.DataTable) {
       searchable: isSearchable,
       sortable: isSortable,
       fixedHeight: false,
-      perPage: 7,
+      perPage: 5,
+      perPageSelect: [5, 10, 15, 20, 25],
       labels: {
           placeholder: "Cari data...",
           perPage: "Data",

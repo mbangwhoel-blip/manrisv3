@@ -251,7 +251,8 @@ if ($appStatus === 'disetujui') {
       </div>
       <div class="datatable-dropdown" style="margin:0;display:flex;align-items:center">
         <select class="datatable-selector" id="limitMonevKonsol">
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="15">15</option>
           <option value="25">25</option>
           <option value="50">50</option>
@@ -392,7 +393,7 @@ if ($appStatus === 'disetujui') {
 
 <script>
 // ── Filter + pagination tabel konsolidasi ────────────────────
-const konsolState = { q: '', unit: '', filter: 'all', page: 1, size: 10 };
+const konsolState = { q: '', unit: '', filter: 'all', page: 1, size: 5 };
 const konsolFilterLabels = { terisi: 'Sudah dipantau', efektif: 'Efektif', eskalasi: 'Eskalasi', penurunan: 'Penurunan' };
 
 function applyKonsolTable() {
@@ -487,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 200);
   });
   document.getElementById('limitMonevKonsol').addEventListener('change', function () {
-    konsolState.size = parseInt(this.value, 10) || 10;
+    konsolState.size = parseInt(this.value, 10) || 5;
     konsolState.page = 1;
     applyKonsolTable();
   });

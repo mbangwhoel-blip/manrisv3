@@ -701,6 +701,372 @@ if (!function_exists('laporanTanggalKeIso')) {
     }
 }
 
+if (!function_exists('laporanRenderPerbandinganMatriks5x5')) {
+    /**
+     * Render Peta Matriks Risiko 5x5 per unit kerja dengan perbandingan kondisi awal dan kondisi akhir.
+     */
+    function laporanRenderPerbandinganMatriks5x5(array $rows, int $triwulan, string $tahun, string $cleanUnitKerja, int $unitNo): string {
+        $romawiArr = ['I', 'II', 'III', 'IV'];
+        $kolomKiriJudul  = ($triwulan > 1) ? 'KONDISI AKHIR' : 'KONDISI AWAL';
+        $kolomKiriTw     = ($triwulan > 1) ? '(TW ' . ($romawiArr[$triwulan - 2] ?? 'I') . ')' : '(TW I)';
+        $kolomKananJudul = 'KONDISI AKHIR';
+        $kolomKananTw    = '(TW ' . ($romawiArr[$triwulan - 1] ?? 'I') . ')';
+
+        $pLabels = [1 => 'Jarang', 2 => 'Kecil', 3 => 'Sedang', 4 => 'Besar', 5 => 'Hampir Pasti'];
+        $dLabels = [1 => 'Tidak Signifikan', 2 => 'Kecil', 3 => 'Sedang', 4 => 'Besar', 5 => 'Katastropik'];
+
+        // Inisialisasi sel matriks 5x5
+        $matrixAwal = [];
+        $matrixAkhir = [];
+        for ($p = 1; $p <= 5; $p++) {
+            for ($d = 1; $d <= 5; $d++) {
+                $matrixAwal[$p][$d] = [];
+                $matrixAkhir[$p][$d] = [];
+            }
+        }
+
+        $statAwal = ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0];
+        $statAkhir = ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0];
+        $totalAwal = 0;
+        $totalAkhir = 0;
+
+        foreach ($rows as $row) {
+            $kode = trim((string)($row['kode_risiko'] ?? ''));
+            if ($kode === '') {
+                $kode = 'R';
+            }
+
+            // 1. Kondisi Awal
+            $ap = (int)($row['awal_p'] ?? 0);
+            $ad = (int)($row['awal_d'] ?? 0);
+            if ($ap >= 1 && $ap <= 5 && $ad >= 1 && $ad <= 5) {
+                $matrixAwal[$ap][$ad][] = $kode;
+                $totalAwal++;
+
+                $tAwal = trim((string)($row['awal_tingkat'] ?? ''));
+                if (isset($statAwal[$tAwal])) {
+                    $statAwal[$tAwal]++;
+                } else {
+                    $skorAwal = (int)round($ap * $ad * getBobot($ap, $ad));
+                    $tFall = ($skorAwal >= 20) ? 'Sangat Tinggi' : (($skorAwal >= 15) ? 'Tinggi' : (($skorAwal >= 10) ? 'Sedang' : (($skorAwal >= 5) ? 'Rendah' : 'Sangat Rendah')));
+                    if (isset($statAwal[$tFall])) {
+                        $statAwal[$tFall]++;
+                    }
+                }
+            }
+
+            // 2. Kondisi Akhir (hanya yang terpantau / akhir_nilai !== null)
+            if ($row['akhir_nilai'] !== null && $row['akhir_p'] !== null && $row['akhir_d'] !== null) {
+                $kp = (int)$row['akhir_p'];
+                $kd = (int)$row['akhir_d'];
+                if ($kp >= 1 && $kp <= 5 && $kd >= 1 && $kd <= 5) {
+                    $matrixAkhir[$kp][$kd][] = $kode;
+                    $totalAkhir++;
+
+                    $tAkhir = trim((string)($row['akhir_tingkat'] ?? ''));
+                    if (isset($statAkhir[$tAkhir])) {
+                        $statAkhir[$tAkhir]++;
+                    } else {
+                        $skorAkhir = (int)round($kp * $kd * getBobot($kp, $kd));
+                        $tFall = ($skorAkhir >= 20) ? 'Sangat Tinggi' : (($skorAkhir >= 15) ? 'Tinggi' : (($skorAkhir >= 10) ? 'Sedang' : (($skorAkhir >= 5) ? 'Rendah' : 'Sangat Rendah')));
+                        if (isset($statAkhir[$tFall])) {
+                            $statAkhir[$tFall]++;
+                        }
+                    }
+                }
+            }
+        }
+
+        $renderSingleTable = function(array $cellMap, string $judul, string $subJudul, int $totalRisiko) use ($pLabels, $dLabels): string {
+            $html = '<div class="matriks-col" style="flex:1; min-width:0;">';
+            $html .= '<div style="background:#1e3a8a; color:#ffffff; font-weight:bold; font-size:8.5pt; text-align:center; padding:5px 8px; border:1px solid #1e3a8a; border-radius:4px 4px 0 0; letter-spacing:0.02em;">';
+            $html .= xss($judul) . ' ' . xss($subJudul) . ' <span style="font-size:7.5pt; font-weight:normal; opacity:0.9;">(' . $totalRisiko . ' Risiko)</span>';
+            $html .= '</div>';
+
+            $html .= '<table class="matriks-5x5-table" style="width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.5pt; border:1px solid #000; background:#fff;">';
+            $html .= '<thead><tr style="background:#d9e1f2;">';
+            $html .= '<th style="border:1px solid #000; padding:3px 2px; font-size:7pt; width:15%; text-align:center; color:#1e293b; font-weight:bold;">P \ D</th>';
+            for ($d = 1; $d <= 5; $d++) {
+                $html .= '<th style="border:1px solid #000; padding:3px 2px; font-size:7pt; width:17%; text-align:center; color:#1e293b; font-weight:bold;" title="D' . $d . ': ' . $dLabels[$d] . '">D' . $d . '</th>';
+            }
+            $html .= '</tr></thead>';
+            $html .= '<tbody>';
+
+            for ($p = 5; $p >= 1; $p--) {
+                $html .= '<tr>';
+                $html .= '<th style="border:1px solid #000; background:#d9e1f2; font-size:7pt; padding:2px; text-align:center; color:#1e293b; font-weight:bold;" title="P' . $p . ': ' . $pLabels[$p] . '">P' . $p . '</th>';
+
+                for ($d = 1; $d <= 5; $d++) {
+                    $skor = (int)round($p * $d * getBobot($p, $d));
+                    $bg = heatmapColor($p, $d);
+                    $fg = ($skor >= 10 && $skor <= 14) ? '#000000' : '#ffffff';
+                    $codes = $cellMap[$p][$d] ?? [];
+                    $cnt = count($codes);
+
+                    $html .= '<td class="heatmap-cell" style="border:1px solid #000; background-color:' . $bg . '; color:' . $fg . '; text-align:center; vertical-align:middle; padding:2px; height:42px; line-height:1.15; box-sizing:border-box;">';
+                    $html .= '<div style="font-size:7.5pt; font-weight:bold; opacity:0.85; line-height:1;">' . $skor . '</div>';
+
+                    if ($cnt > 0) {
+                        $badgeBg = ($skor >= 10 && $skor <= 14) ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.28)';
+                        $html .= '<div style="margin-top:2px; font-size:6.5pt; font-weight:800;">';
+                        if ($cnt >= 3) {
+                            $html .= '<span style="display:inline-block; background:' . $badgeBg . '; color:' . $fg . '; border-radius:2px; padding:0 2px; font-weight:900; margin-bottom:1px;">(' . $cnt . ')</span> ';
+                        }
+                        $html .= '<span style="word-break:normal;">' . xss(implode(', ', $codes)) . '</span>';
+                        $html .= '</div>';
+                    }
+
+                    $html .= '</td>';
+                }
+                $html .= '</tr>';
+            }
+
+            $html .= '</tbody>';
+            $html .= '</table>';
+            $html .= '</div>';
+            return $html;
+        };
+
+        ob_start();
+?>
+  <div class="matriks-perbandingan-wrap" style="margin: 14px 0 24px 0; page-break-inside: avoid; break-inside: avoid;">
+    <p class="table-caption" style="font-style:italic; margin-bottom:8px; font-size:10pt; text-indent:0; font-weight:bold; color:#1e3a8a;">
+      Gambar <?= $unitNo ?>. Peta Matriks Risiko 5×5 <?= xss($cleanUnitKerja) ?> — Perbandingan <?= xss($kolomKiriJudul) ?> <?= xss($kolomKiriTw) ?> vs <?= xss($kolomKananJudul) ?> <?= xss($kolomKananTw) ?>
+    </p>
+
+    <!-- Grid 2 Matriks Berdampingan -->
+    <div class="matriks-grid-container" style="display:flex; gap:14px; justify-content:space-between; margin-bottom:10px;">
+      <?= $renderSingleTable($matrixAwal, $kolomKiriJudul, $kolomKiriTw, $totalAwal) ?>
+      <?= $renderSingleTable($matrixAkhir, $kolomKananJudul, $kolomKananTw, $totalAkhir) ?>
+    </div>
+
+    <!-- Legend Warna Tingkat Risiko -->
+    <div class="matriks-legend-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:6px 10px; margin-bottom:8px;">
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; font-size:7.5pt; line-height:1.4;">
+        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+          <span style="font-weight:bold; color:#374151;">Tingkat Risiko:</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#dc2626; border-radius:50%;"></span><strong>Sangat Tinggi</strong> (&ge;20)</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f97316; border-radius:50%;"></span><strong>Tinggi</strong> (15–19)</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#FFFF00; border:1px solid #cbd5e1; border-radius:50%;"></span><strong>Sedang</strong> (10–14)</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#22c55e; border-radius:50%;"></span><strong>Rendah</strong> (5–9)</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#3b82f6; border-radius:50%;"></span><strong>Sangat Rendah</strong> (1–4)</span>
+        </div>
+        <div style="font-size:7pt; color:#64748b; font-style:italic;">
+          P = Probabilitas (1–5) &bull; D = Dampak (1–5) &bull; Skor = P &times; D &times; Bobot
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabel Ringkasan Pergeseran Tingkat Risiko -->
+    <table class="matriks-summary-table" style="width:100%; border-collapse:collapse; font-size:8pt; table-layout:fixed; border:1px solid #cbd5e1;">
+      <thead>
+        <tr style="background:#d9e1f2;">
+          <th style="border:1px solid #94a3b8; padding:3px 6px; text-align:left; width:34%; font-weight:bold;">Tingkat Risiko</th>
+          <th style="border:1px solid #94a3b8; padding:3px 6px; text-align:center; width:22%; font-weight:bold;"><?= xss($kolomKiriJudul) ?> <?= xss($kolomKiriTw) ?></th>
+          <th style="border:1px solid #94a3b8; padding:3px 6px; text-align:center; width:22%; font-weight:bold;"><?= xss($kolomKananJudul) ?> <?= xss($kolomKananTw) ?></th>
+          <th style="border:1px solid #94a3b8; padding:3px 6px; text-align:center; width:22%; font-weight:bold;">Perubahan (Delta)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php
+          $levelsConfig = [
+            'Sangat Tinggi' => ['bg' => '#fee2e2', 'color' => '#dc2626'],
+            'Tinggi'        => ['bg' => '#ffedd5', 'color' => '#f97316'],
+            'Sedang'        => ['bg' => '#fef9c3', 'color' => '#854d0e'],
+            'Rendah'        => ['bg' => '#dcfce7', 'color' => '#16a34a'],
+            'Sangat Rendah' => ['bg' => '#dbeafe', 'color' => '#2563eb'],
+          ];
+          foreach ($levelsConfig as $lvlName => $lvlStyle):
+            $cAw = $statAwal[$lvlName] ?? 0;
+            $cAk = $statAkhir[$lvlName] ?? 0;
+            $delta = $cAk - $cAw;
+            $deltaLabel = ($delta > 0) ? '+' . $delta : ($delta < 0 ? (string)$delta : '0 (Tetap)');
+            $deltaColor = ($delta < 0) ? '#16a34a' : ($delta > 0 ? '#dc2626' : '#6b7280');
+        ?>
+        <tr>
+          <td style="border:1px solid #cbd5e1; padding:2px 6px; font-weight:600; background:<?= $lvlStyle['bg'] ?>; color:<?= $lvlStyle['color'] ?>;">
+            <?= $lvlName ?>
+          </td>
+          <td style="border:1px solid #cbd5e1; padding:2px 6px; text-align:center; font-weight:bold;"><?= $cAw ?></td>
+          <td style="border:1px solid #cbd5e1; padding:2px 6px; text-align:center; font-weight:bold;"><?= $cAk ?></td>
+          <td style="border:1px solid #cbd5e1; padding:2px 6px; text-align:center; font-weight:bold; color:<?= $deltaColor ?>;">
+            <?= $deltaLabel ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <tr style="background:#f8fafc; font-weight:bold;">
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:left;">TOTAL RISIKO</td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"><?= $totalAwal ?></td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"><?= $totalAkhir ?></td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center; color:#3b82f6;">
+            <?= ($totalAkhir - $totalAwal) === 0 ? 'Lengkap (100%)' : (($totalAkhir < $totalAwal) ? ($totalAwal - $totalAkhir) . ' belum dievaluasi' : '+' . ($totalAkhir - $totalAwal)) ?>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+<?php
+        return ob_get_clean();
+    }
+}
+
+if (!function_exists('laporanUpgradeDraftHtmlWithMatriks')) {
+    /**
+     * Otomatis melengkapi draft lama yang belum memiliki Peta Matriks Risiko 5x5 pada Bab II.
+     */
+    function laporanUpgradeDraftHtmlWithMatriks(mysqli $db, string $draftHtml, int $triwulan, string $tahun, array $unitKerjaList): string {
+        if (strpos($draftHtml, 'matriks-perbandingan-wrap') !== false) {
+            return $draftHtml;
+        }
+
+        $parts = preg_split('/(<\/table>)/i', $draftHtml, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $newHtml = '';
+        $unitIdx = 0;
+        $totalUnits = count($unitKerjaList);
+
+        for ($i = 0; $i < count($parts); $i++) {
+            $chunk = $parts[$i];
+            $newHtml .= $chunk;
+
+            if (strtolower($chunk) === '</table>') {
+                $prevChunk = $parts[$i - 1] ?? '';
+                // Pastikan penutup </table> ini adalah milik tabel risiko unit (laporan-table)
+                if (stripos($prevChunk, 'laporan-table') !== false && $unitIdx < $totalUnits) {
+                    $unitKerja = $unitKerjaList[$unitIdx];
+                    $cleanUnitKerja = laporanCleanUnitName($unitKerja);
+                    $unitNo = $unitIdx + 1;
+                    $rows = laporanGetDataUnit($db, $unitKerja, $tahun, $triwulan);
+                    $matriksHtml = laporanRenderPerbandinganMatriks5x5($rows, $triwulan, $tahun, $cleanUnitKerja, $unitNo);
+                    $newHtml .= "\n" . $matriksHtml . "\n";
+                    $unitIdx++;
+                }
+            }
+        }
+        return $newHtml;
+    }
+}
+
+if (!function_exists('laporanAddPerbandinganMatriksDocx')) {
+    /**
+     * Tambahkan Peta Matriks Risiko 5x5 ke dokumen PhpWord (.docx).
+     */
+    function laporanAddPerbandinganMatriksDocx($section, array $rows, int $triwulan, string $cleanUnitKerja, int $unitNo): void {
+        $romawiArr = ['I', 'II', 'III', 'IV'];
+        $kolomKiriJudul  = ($triwulan > 1) ? 'KONDISI AKHIR' : 'KONDISI AWAL';
+        $kolomKiriTw     = ($triwulan > 1) ? '(TW ' . ($romawiArr[$triwulan - 2] ?? 'I') . ')' : '(TW I)';
+        $kolomKananJudul = 'KONDISI AKHIR';
+        $kolomKananTw    = '(TW ' . ($romawiArr[$triwulan - 1] ?? 'I') . ')';
+
+        $matrixAwal = [];
+        $matrixAkhir = [];
+        for ($p = 1; $p <= 5; $p++) {
+            for ($d = 1; $d <= 5; $d++) {
+                $matrixAwal[$p][$d] = [];
+                $matrixAkhir[$p][$d] = [];
+            }
+        }
+        $statAwal = ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0];
+        $statAkhir = ['Sangat Tinggi' => 0, 'Tinggi' => 0, 'Sedang' => 0, 'Rendah' => 0, 'Sangat Rendah' => 0];
+        $totalAwal = 0;
+        $totalAkhir = 0;
+
+        foreach ($rows as $row) {
+            $kode = trim((string)($row['kode_risiko'] ?? ''));
+            if ($kode === '') $kode = 'R';
+            $ap = (int)($row['awal_p'] ?? 0);
+            $ad = (int)($row['awal_d'] ?? 0);
+            if ($ap >= 1 && $ap <= 5 && $ad >= 1 && $ad <= 5) {
+                $matrixAwal[$ap][$ad][] = $kode;
+                $totalAwal++;
+                $tAwal = trim((string)($row['awal_tingkat'] ?? ''));
+                if (isset($statAwal[$tAwal])) $statAwal[$tAwal]++;
+            }
+            if ($row['akhir_nilai'] !== null && $row['akhir_p'] !== null && $row['akhir_d'] !== null) {
+                $kp = (int)$row['akhir_p'];
+                $kd = (int)$row['akhir_d'];
+                if ($kp >= 1 && $kp <= 5 && $kd >= 1 && $kd <= 5) {
+                    $matrixAkhir[$kp][$kd][] = $kode;
+                    $totalAkhir++;
+                    $tAkhir = trim((string)($row['akhir_tingkat'] ?? ''));
+                    if (isset($statAkhir[$tAkhir])) $statAkhir[$tAkhir]++;
+                }
+            }
+        }
+
+        $fCaption = ['italic' => true, 'size' => 10, 'bold' => true, 'color' => '1E3A8A'];
+        $fTableB  = ['bold' => true, 'size' => 8];
+        $fTableS  = ['size' => 7.5];
+        $pCenter  = ['alignment' => 'center', 'spaceBefore' => 0, 'spaceAfter' => 0];
+
+        $section->addText('Gambar ' . $unitNo . '. Peta Matriks Risiko 5×5 ' . $cleanUnitKerja . ' (Perbandingan ' . $kolomKiriJudul . ' ' . $kolomKiriTw . ' vs ' . $kolomKananJudul . ' ' . $kolomKananTw . ')', $fCaption, ['spaceBefore' => 120, 'spaceAfter' => 60]);
+
+        $addDocxMatrix = function($sec, array $cellMap, string $judul, int $tot) use ($fTableB, $fTableS, $pCenter): void {
+            $sec->addText($judul . ' (' . $tot . ' Risiko)', ['bold' => true, 'size' => 9, 'color' => '1E3A8A'], ['spaceBefore' => 60, 'spaceAfter' => 40]);
+            $t = $sec->addTable(['borderSize' => 4, 'borderColor' => '000000', 'width' => 100, 'unit' => 'pct', 'cellMargin' => 20]);
+            $t->addRow();
+            $t->addCell(1000, ['bgColor' => 'D9E1F2'])->addText('P \ D', $fTableB, $pCenter);
+            for ($d = 1; $d <= 5; $d++) {
+                $t->addCell(1600, ['bgColor' => 'D9E1F2'])->addText('D' . $d, $fTableB, $pCenter);
+            }
+            for ($p = 5; $p >= 1; $p--) {
+                $t->addRow();
+                $t->addCell(1000, ['bgColor' => 'D9E1F2'])->addText('P' . $p, $fTableB, $pCenter);
+                for ($d = 1; $d <= 5; $d++) {
+                    $skor = (int)round($p * $d * getBobot($p, $d));
+                    $bgHex = ltrim(heatmapColor($p, $d), '#');
+                    $fgHex = ($skor >= 10 && $skor <= 14) ? '000000' : 'FFFFFF';
+                    $codes = $cellMap[$p][$d] ?? [];
+                    $cnt = count($codes);
+
+                    $c = $t->addCell(1600, ['bgColor' => $bgHex]);
+                    $c->addText((string)$skor, ['bold' => true, 'size' => 8, 'color' => $fgHex], $pCenter);
+                    if ($cnt > 0) {
+                        $txt = ($cnt >= 3 ? '(' . $cnt . ') ' : '') . implode(', ', $codes);
+                        $c->addText($txt, ['bold' => true, 'size' => 7, 'color' => $fgHex], $pCenter);
+                    }
+                }
+            }
+        };
+
+        $addDocxMatrix($section, $matrixAwal, $kolomKiriJudul . ' ' . $kolomKiriTw, $totalAwal);
+        $section->addTextBreak(1);
+        $addDocxMatrix($section, $matrixAkhir, $kolomKananJudul . ' ' . $kolomKananTw, $totalAkhir);
+        $section->addTextBreak(1);
+
+        $secSum = $section->addTable(['borderSize' => 4, 'borderColor' => 'CBD5E1', 'width' => 100, 'unit' => 'pct', 'cellMargin' => 20]);
+        $secSum->addRow();
+        $secSum->addCell(3400, ['bgColor' => 'D9E1F2'])->addText('Tingkat Risiko', $fTableB);
+        $secSum->addCell(2200, ['bgColor' => 'D9E1F2'])->addText($kolomKiriJudul . ' ' . $kolomKiriTw, $fTableB, $pCenter);
+        $secSum->addCell(2200, ['bgColor' => 'D9E1F2'])->addText($kolomKananJudul . ' ' . $kolomKananTw, $fTableB, $pCenter);
+        $secSum->addCell(2200, ['bgColor' => 'D9E1F2'])->addText('Perubahan (Delta)', $fTableB, $pCenter);
+
+        $levelsConfig = [
+            'Sangat Tinggi' => 'fee2e2',
+            'Tinggi'        => 'ffedd5',
+            'Sedang'        => 'fef9c3',
+            'Rendah'        => 'dcfce7',
+            'Sangat Rendah' => 'dbeafe',
+        ];
+        foreach ($levelsConfig as $lvlName => $bgH) {
+            $cAw = $statAwal[$lvlName] ?? 0;
+            $cAk = $statAkhir[$lvlName] ?? 0;
+            $delta = $cAk - $cAw;
+            $dLabel = ($delta > 0) ? '+' . $delta : ($delta < 0 ? (string)$delta : '0 (Tetap)');
+            $secSum->addRow();
+            $secSum->addCell(3400, ['bgColor' => $bgH])->addText($lvlName, ['bold' => true, 'size' => 8]);
+            $secSum->addCell(2200)->addText((string)$cAw, $fTableS, $pCenter);
+            $secSum->addCell(2200)->addText((string)$cAk, $fTableS, $pCenter);
+            $secSum->addCell(2200)->addText($dLabel, ['bold' => true, 'size' => 8], $pCenter);
+        }
+        $secSum->addRow();
+        $secSum->addCell(3400, ['bgColor' => 'F8FAFC'])->addText('TOTAL RISIKO', ['bold' => true, 'size' => 8]);
+        $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText((string)$totalAwal, $fTableB, $pCenter);
+        $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText((string)$totalAkhir, $fTableB, $pCenter);
+        $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText($totalAkhir === $totalAwal ? 'Lengkap (100%)' : ($totalAkhir < $totalAwal ? ($totalAwal - $totalAkhir) . ' belum dievaluasi' : '+' . ($totalAkhir - $totalAwal)), $fTableB, $pCenter);
+        $section->addTextBreak(1);
+    }
+}
+
 // ── POST: Simpan Draft Laporan (Edit Online) ───────────────────
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'save_draft') {
     requireLogin();
@@ -867,6 +1233,8 @@ if ($isGenerate && $format === 'docx') {
     }
 
     if (!empty($draftRow['konten_html'])) {
+        $unitKerjaList = laporanGetUnitKerjaList($db);
+        $draftRow['konten_html'] = laporanUpgradeDraftHtmlWithMatriks($db, (string)$draftRow['konten_html'], $triwulan, $tahun, $unitKerjaList);
         // Konversi dari draft tersimpan via laporanMonevHtmlToDocx
         require_once __DIR__ . '/laporan_monev_html_to_docx.php';
         $phpWord = laporanMonevHtmlToDocx($draftRow['konten_html']);
@@ -1045,7 +1413,7 @@ if ($isGenerate && $format === 'docx') {
     $section->addText('PELAKSANAAN PENGENDALIAN RISIKO', $fTitle, $pHeading);
 
     // Lebar kolom (twips): No, Kode, Pernyataan, P, D, Nilai, Tingkat, Upaya, P, D, Nilai, Tingkat
-    $wNo = 350; $wKode = 850; $wNama = 2000; $wP = 280; $wD = 280; $wNilai = 400; $wTingkat = 950; $wUpaya = 1700;
+    $wNo = 400; $wKode = 950; $wNama = 2000; $wP = 240; $wD = 240; $wNilai = 460; $wTingkat = 950; $wUpaya = 1750;
     $unitHuruf = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     foreach ($unitKerjaList as $unitIdx => $unitKerja) {
@@ -1127,6 +1495,7 @@ if ($isGenerate && $format === 'docx') {
             }
         }
         $section->addTextBreak(1);
+        laporanAddPerbandinganMatriksDocx($section, $rows, $triwulan, $cleanUnitKerja, $unitNo);
     }
     $section->addPageBreak();
 
@@ -1248,6 +1617,9 @@ if ($isGenerate) {
         }
     }
     $hasSavedDraft  = !empty($draftRow['konten_html']);
+    if ($hasSavedDraft) {
+        $draftRow['konten_html'] = laporanUpgradeDraftHtmlWithMatriks($db, (string)$draftRow['konten_html'], $triwulan, $tahun, $unitKerjaList);
+    }
     $draftUpdatedAt = $hasSavedDraft ? $draftRow['updated_at'] : null;
 
     // ── Mode Word (.doc) — kirim header unduhan Word ──────────
@@ -1662,21 +2034,27 @@ if ($isGenerate) {
     }
 
     table.laporan-table .no-col {
-        width: 3.5%;
+        width: 4%;
         text-align: center;
+        white-space: nowrap;
+        padding-left: 1px;
+        padding-right: 1px;
     }
 
     table.laporan-table .kode-col {
-        width: 6.5%;
+        width: 7.5%;
         text-align: center;
+        white-space: nowrap;
+        padding-left: 2px;
+        padding-right: 2px;
     }
 
     table.laporan-table .pernyataan-col {
-        width: 25%;
+        width: 23.5%;
     }
 
     table.laporan-table .upaya-col {
-        width: 23%;
+        width: 24%;
     }
 
     table.laporan-table th.pernyataan-col,
@@ -1690,13 +2068,59 @@ if ($isGenerate) {
     }
 
     table.laporan-table .small-col {
-        width: 3.5%;
+        width: 3%;
         text-align: center;
+        white-space: nowrap;
+        padding-left: 1px;
+        padding-right: 1px;
     }
 
     table.laporan-table .nilai-col {
-        width: 4.5%;
+        width: 5.5%;
         text-align: center;
+        white-space: nowrap;
+        padding-left: 2px;
+        padding-right: 2px;
+    }
+
+    table.laporan-table th.nilai-col,
+    table.laporan-table th.small-col,
+    table.laporan-table th.no-col,
+    table.laporan-table th.kode-col {
+        white-space: nowrap;
+    }
+
+    table.laporan-table col:nth-child(1) {
+        width: 4%;
+    }
+
+    table.laporan-table col:nth-child(2) {
+        width: 7.5%;
+    }
+
+    table.laporan-table col:nth-child(3) {
+        width: 23.5%;
+    }
+
+    table.laporan-table col:nth-child(4),
+    table.laporan-table col:nth-child(5),
+    table.laporan-table col:nth-child(9),
+    table.laporan-table col:nth-child(10) {
+        width: 3%;
+    }
+
+    table.laporan-table col:nth-child(6),
+    table.laporan-table col:nth-child(11) {
+        width: 5.5%;
+    }
+
+    table.laporan-table col:nth-child(7),
+    table.laporan-table col:nth-child(12) {
+        width: 9%;
+    }
+
+    table.laporan-table col:nth-child(8) {
+        width: 24%;
     }
 
     table.laporan-table .tingkat-col {
@@ -1705,6 +2129,93 @@ if ($isGenerate) {
         font-weight: 600;
         font-size: 8pt;
         line-height: 1.15;
+    }
+
+    /* ── Peta Matriks Risiko 5x5 Bab II ─────────────────────── */
+    .matriks-perbandingan-wrap {
+        margin: 16px 0 28px 0;
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .matriks-grid-container {
+        display: flex;
+        gap: 14px;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+    .matriks-col {
+        flex: 1;
+        min-width: 0;
+    }
+
+    table.matriks-5x5-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 7.5pt;
+        border: 1px solid #000;
+        background: #fff;
+        margin-bottom: 0;
+    }
+
+    table.matriks-5x5-table th,
+    table.matriks-5x5-table td {
+        border: 1px solid #000;
+        text-align: center;
+        vertical-align: middle;
+        padding: 2px;
+        box-sizing: border-box;
+    }
+
+    table.matriks-5x5-table th {
+        background: #d9e1f2;
+        color: #1e293b;
+        font-size: 7pt;
+        font-weight: bold;
+    }
+
+    table.matriks-5x5-table td.heatmap-cell {
+        height: 40px;
+        line-height: 1.15;
+    }
+
+    .matriks-legend-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        padding: 6px 10px;
+        margin-bottom: 8px;
+        font-size: 7.5pt;
+        line-height: 1.4;
+    }
+
+    table.matriks-summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8pt;
+        table-layout: fixed;
+        border: 1px solid #cbd5e1;
+        margin-bottom: 8px;
+    }
+
+    table.matriks-summary-table th,
+    table.matriks-summary-table td {
+        border: 1px solid #cbd5e1;
+        padding: 3px 6px;
+        box-sizing: border-box;
+    }
+
+    table.matriks-summary-table th {
+        background: #d9e1f2;
+        font-weight: bold;
+    }
+
+    @media (max-width: 680px) {
+        .matriks-grid-container {
+            flex-direction: column;
+        }
     }
 
     /* ── Cover Page ──────────────────────────────────────────── */
@@ -1920,6 +2431,71 @@ if ($isGenerate) {
         tr {
             page-break-inside: avoid;
         }
+
+        .matriks-perbandingan-wrap {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .matriks-grid-container {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 12px !important;
+        }
+
+        .matriks-col {
+            flex: 1 !important;
+        }
+
+        table.matriks-5x5-table th,
+        table.matriks-5x5-table td {
+            font-size: 7pt !important;
+            padding: 2px 1px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        table.matriks-5x5-table td.heatmap-cell {
+            height: 34px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        table.matriks-summary-table th,
+        table.matriks-summary-table td {
+            font-size: 7.5pt !important;
+            padding: 2px 4px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        table.laporan-table .no-col {
+            width: 4% !important;
+            white-space: nowrap !important;
+            padding-left: 1px !important;
+            padding-right: 1px !important;
+        }
+
+        table.laporan-table .kode-col {
+            width: 7.5% !important;
+            white-space: nowrap !important;
+            padding-left: 2px !important;
+            padding-right: 2px !important;
+        }
+
+        table.laporan-table .small-col {
+            width: 3% !important;
+            white-space: nowrap !important;
+            padding-left: 1px !important;
+            padding-right: 1px !important;
+        }
+
+        table.laporan-table .nilai-col {
+            width: 5.5% !important;
+            white-space: nowrap !important;
+            padding-left: 2px !important;
+            padding-right: 2px !important;
+        }
     }
   </style>
 <?php if ($isWordDoc): ?>
@@ -2123,17 +2699,17 @@ if ($isGenerate) {
 
       <table class="laporan-table">
         <colgroup>
-          <col style="width:3.5%;">
-          <col style="width:6.5%;">
-          <col style="width:25%;">
-          <col style="width:3.5%;">
-          <col style="width:3.5%;">
-          <col style="width:4.5%;">
+          <col style="width:4%;">
+          <col style="width:7.5%;">
+          <col style="width:23.5%;">
+          <col style="width:3%;">
+          <col style="width:3%;">
+          <col style="width:5.5%;">
           <col style="width:9%;">
-          <col style="width:23%;">
-          <col style="width:3.5%;">
-          <col style="width:3.5%;">
-          <col style="width:4.5%;">
+          <col style="width:24%;">
+          <col style="width:3%;">
+          <col style="width:3%;">
+          <col style="width:5.5%;">
           <col style="width:9%;">
         </colgroup>
         <thead>
@@ -2155,11 +2731,11 @@ if ($isGenerate) {
           <tr>
             <th class="small-col">P</th>
             <th class="small-col">D</th>
-            <th class="nilai-col">Nilai</th>
+            <th class="nilai-col" style="white-space:nowrap;">Nilai</th>
             <th class="tingkat-col">Tingkat<br>Risiko</th>
             <th class="small-col">P</th>
             <th class="small-col">D</th>
-            <th class="nilai-col">Nilai</th>
+            <th class="nilai-col" style="white-space:nowrap;">Nilai</th>
             <th class="tingkat-col">Tingkat<br>Risiko</th>
           </tr>
         </thead>
@@ -2198,16 +2774,16 @@ if ($isGenerate) {
             <td class="center"><?= $rowNo + 1 ?></td>
             <td class="center"><?= xss((string)($row['kode_risiko'] ?? '')) ?></td>
             <td><?= xss((string)($row['nama_risiko'] ?? '')) ?></td>
-            <td class="center"><?= $awalP ?></td>
-            <td class="center"><?= $awalD ?></td>
-            <td class="center"><?= $awalNilai ?></td>
+            <td class="small-col center"><?= $awalP ?></td>
+            <td class="small-col center"><?= $awalD ?></td>
+            <td class="nilai-col center"><?= $awalNilai ?></td>
             <td class="tingkat-col center" style="background-color:<?= laporanRisikoBg($awalTingkat) ?>; color:<?= laporanRisikoColor($awalTingkat) ?>;">
               <?= ($awalTingkat !== '') ? xss($awalTingkat) : '-' ?>
             </td>
             <td><?= $upayaHtml ?></td>
-            <td class="center"><?= $akhirP ?></td>
-            <td class="center"><?= $akhirD ?></td>
-            <td class="center"><?= $akhirNilai ?></td>
+            <td class="small-col center"><?= $akhirP ?></td>
+            <td class="small-col center"><?= $akhirD ?></td>
+            <td class="nilai-col center"><?= $akhirNilai ?></td>
             <td class="tingkat-col center" style="background-color:<?= ($row['akhir_nilai'] !== null) ? laporanRisikoBg($akhirTingkat) : '#f3f4f6' ?>; color:<?= ($row['akhir_nilai'] !== null) ? laporanRisikoColor($akhirTingkat) : '#374151' ?>;">
               <?= $akhirTingkatDisplay ?>
             </td>
@@ -2218,6 +2794,8 @@ if ($isGenerate) {
 ?>
         </tbody>
       </table>
+
+      <?= laporanRenderPerbandinganMatriks5x5($rows, $triwulan, $tahun, $cleanUnitKerja, $unitNo) ?>
 
 <?php
     endforeach;

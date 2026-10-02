@@ -260,7 +260,7 @@ $fApproval = trim($_GET['approval'] ?? '');
 $fLevel    = trim($_GET['level'] ?? '');
 $fDept     = trim($_GET['departemen'] ?? '');
 $page_num  = max(1,(int)($_GET['p'] ?? 1));
-$perPage   = (isset($_GET['limit']) && in_array((int)$_GET['limit'], [5, 10, 15, 20, 25])) ? (int)$_GET['limit'] : 10;
+$perPage   = (isset($_GET['limit']) && in_array((int)$_GET['limit'], [5, 10, 15, 20, 25])) ? (int)$_GET['limit'] : 5;
 $showDeleted = hasRole('Admin') && isset($_GET['deleted']) && $_GET['deleted'] === '1';
 
 $where = [$showDeleted ? 'r.deleted_at IS NOT NULL' : 'r.deleted_at IS NULL'];

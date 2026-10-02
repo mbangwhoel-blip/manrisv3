@@ -259,8 +259,8 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
       </div>
       <div class="datatable-dropdown" style="margin:0; display:flex; align-items:center;">
         <select class="datatable-selector" id="limitIkk" onchange="filterTableIkk()">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="15">15</option>
           <option value="20">20</option>
           <option value="25">25</option>
@@ -411,7 +411,7 @@ function editIkk(r) {
 const ikkState = { page: 1 };
 function filterTableIkk() {
   const query = (document.getElementById('searchIkk')?.value || '').toLowerCase();
-  const limit = parseInt(document.getElementById('limitIkk')?.value || 10, 10);
+  const limit = parseInt(document.getElementById('limitIkk')?.value || 5, 10);
   const allRows = [...document.querySelectorAll('#tableIkk tbody tr')];
   
   const visible = allRows.filter(row => {

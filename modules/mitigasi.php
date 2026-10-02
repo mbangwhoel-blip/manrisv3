@@ -452,8 +452,8 @@ $mitStatLink = APP_URL . '/?page=mitigasi' . ($risikoId ? '&risiko_id=' . $risik
       </div>
       <div class="datatable-dropdown" style="margin:0; display:flex; align-items:center;">
         <select class="datatable-selector" id="limitMitigasi" onchange="filterTableMitigasi()">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="15">15</option>
           <option value="20">20</option>
           <option value="25">25</option>
@@ -719,7 +719,7 @@ function relayoutRiskCells(pageRows) {
 
 function filterTableMitigasi() {
   const query = (document.getElementById('searchMitigasi')?.value || '').toLowerCase();
-  const limit = parseInt(document.getElementById('limitMitigasi')?.value || 10, 10);
+  const limit = parseInt(document.getElementById('limitMitigasi')?.value || 5, 10);
   const allRows = [...document.querySelectorAll('#tableMitigasi tbody tr')];
   
   let count = 0;

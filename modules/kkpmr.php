@@ -593,8 +593,8 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
       </div>
       <div class="datatable-dropdown" style="margin:0; display:flex; align-items:center;">
         <select class="datatable-selector" id="limitKkpmr" onchange="filterTableKkpmr()">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="15">15</option>
           <option value="20">20</option>
           <option value="25">25</option>
@@ -973,11 +973,11 @@ function updatePmHasil() {
 document.getElementById('pmP').addEventListener('input', updatePmHasil);
 document.getElementById('pmD').addEventListener('input', updatePmHasil);
 
-const kkpmrState = { page: 1, lastQuery: '', lastLimit: 10 };
+const kkpmrState = { page: 1, lastQuery: '', lastLimit: 5 };
 let emptyRowKkpmr = null;
 function filterTableKkpmr() {
   const query = (document.getElementById('searchKkpmr')?.value || '').toLowerCase();
-  const limit = parseInt(document.getElementById('limitKkpmr')?.value || 10, 10);
+  const limit = parseInt(document.getElementById('limitKkpmr')?.value || 5, 10);
   if (query !== kkpmrState.lastQuery || limit !== kkpmrState.lastLimit) {
     kkpmrState.page = 1;
     kkpmrState.lastQuery = query;
