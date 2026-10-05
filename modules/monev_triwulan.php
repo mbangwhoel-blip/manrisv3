@@ -4,7 +4,7 @@
  */
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
-requireRole('Admin', 'Risk Manager', 'Pimpinan');
+requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
 $db = getDB();
 $chkReal = $db->query("SHOW COLUMNS FROM monev_triwulan LIKE 'realisasi_pengendalian'");
 if ($chkReal && $chkReal->num_rows === 0) {
@@ -78,6 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s->execute();
         }
         setFlash('success', 'Monev Triwulan '.$triwulan.' berhasil disimpan.');
+        $kkprTahunQuery = $db->query("SELECT tahun FROM kkpr_header WHERE id = " . (int)$idKkpr);
+        $tahunKkpr = ($kkprTahunQuery && $tRow = $kkprTahunQuery->fetch_assoc()) ? $tRow['tahun'] : date('Y');
+        invalidateLaporanMonevDraft($tahunKkpr, $triwulan);
+        invalidateLaporanMonevDraft($tahunKkpr, null);
         header('Location: ' . APP_URL . '/?page=monev_triwulan&id=' . $idKkpr . '&tw=' . $triwulan); exit;
     }
 }
@@ -88,7 +92,7 @@ $activeTw = (int)($_GET['tw'] ?? 1);
 if ($activeTw < 1) $activeTw = 1;
 if ($activeTw > 4) $activeTw = 4;
 
-$kkpr_cond = hasRole('Admin', 'Pimpinan') ? "" : "WHERE created_by = " . (int)$_SESSION['user_id'];
+$kkpr_cond = canAccessAllRecords() ? "" : "WHERE created_by = " . (int)$_SESSION['user_id'];
 $kkprList = $db->query("SELECT id, tahun, unit_pemilik_risiko, nama_pemilik_risiko FROM kkpr_header $kkpr_cond ORDER BY tahun DESC")->fetch_all(MYSQLI_ASSOC);
 
 $kkprRow = null;
@@ -244,7 +248,7 @@ if ($activeId > 0) {
                 <th rowspan="2">RENCANA TINDAK LANJUT</th>
                 <th rowspan="2">STATUS</th>
                 <th rowspan="2">LINK DATA DUKUNG<br>TW <?= $activeTw ?></th>
-                <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2">AKSI</th><?php endif; ?>
+                <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2">AKSI</th><?php endif; ?>
               </tr>
               <tr>
                 <th>P</th><th>D</th><th>BOBOT</th><th>NILAI</th><th>TINGKAT RISIKO</th>
@@ -253,7 +257,7 @@ if ($activeId > 0) {
               </tr>
             </thead>
             <tbody>
-              <?php if(empty($rows)): ?><tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 20 : 19 ?>" class="text-center">Belum ada risiko</td></tr><?php endif; ?>
+              <?php if(empty($rows)): ?><tr><td colspan="<?= hasRole('Admin','Risk Manager','Koordinator') ? 20 : 19 ?>" class="text-center">Belum ada risiko</td></tr><?php endif; ?>
               <?php foreach($rows as $i => $r): 
                 $c = $r['curr'];
                 function bC($t){
@@ -316,7 +320,7 @@ if ($activeId > 0) {
                 </td>
                 <td><?= $c && !empty($c['link_data_dukung']) ? '<a href="'.htmlspecialchars($c['link_data_dukung']).'" target="_blank">Link</a>' : '-' ?></td>
                 
-                <?php if(hasRole('Admin','Risk Manager')): ?>
+                <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
                 <td class="text-center">
                   <button class="btn btn-sm btn-primary" onclick='editMonev(<?= json_encode($r) ?>, <?= $activeTw ?>)'>
                     <i class="fas fa-edit"></i> Isi Monev

@@ -433,13 +433,13 @@ if (!function_exists('laporanGetDataUnit')) {
                         COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
                         COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
                         COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
-                        m.upaya_pengendalian,
-                        m.pantau_p            AS akhir_p,
-                        m.pantau_d            AS akhir_d,
-                        m.pantau_nilai        AS akhir_nilai,
-                        m.pantau_tingkat      AS akhir_tingkat,
-                        m.kendala,
-                        m.rencana_tindak_lanjut
+                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
+                        COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
+                        COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
+                        COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
+                        COALESCE(m.kendala, '')                                                 AS kendala,
+                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
@@ -459,13 +459,13 @@ if (!function_exists('laporanGetDataUnit')) {
                         r.dampak_level        AS awal_d,
                         r.nilai_risiko        AS awal_nilai,
                         r.tingkat_risiko      AS awal_tingkat,
-                        m.upaya_pengendalian,
-                        m.pantau_p            AS akhir_p,
-                        m.pantau_d            AS akhir_d,
-                        m.pantau_nilai        AS akhir_nilai,
-                        m.pantau_tingkat      AS akhir_tingkat,
-                        m.kendala,
-                        m.rencana_tindak_lanjut
+                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
+                        COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
+                        COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
+                        COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
+                        COALESCE(m.kendala, '')                                                 AS kendala,
+                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
@@ -486,13 +486,13 @@ if (!function_exists('laporanGetDataUnit')) {
                         COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
                         COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
                         COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
-                        m.upaya_pengendalian,
-                        m.pantau_p            AS akhir_p,
-                        m.pantau_d            AS akhir_d,
-                        m.pantau_nilai        AS akhir_nilai,
-                        m.pantau_tingkat      AS akhir_tingkat,
-                        m.kendala,
-                        m.rencana_tindak_lanjut
+                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
+                        COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
+                        COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
+                        COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
+                        COALESCE(m.kendala, '')                                                 AS kendala,
+                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
@@ -512,13 +512,13 @@ if (!function_exists('laporanGetDataUnit')) {
                         r.dampak_level        AS awal_d,
                         r.nilai_risiko        AS awal_nilai,
                         r.tingkat_risiko      AS awal_tingkat,
-                        m.upaya_pengendalian,
-                        m.pantau_p            AS akhir_p,
-                        m.pantau_d            AS akhir_d,
-                        m.pantau_nilai        AS akhir_nilai,
-                        m.pantau_tingkat      AS akhir_tingkat,
-                        m.kendala,
-                        m.rencana_tindak_lanjut
+                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
+                        COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
+                        COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
+                        COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
+                        COALESCE(m.kendala, '')                                                 AS kendala,
+                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
@@ -898,9 +898,7 @@ if (!function_exists('laporanRenderPerbandinganMatriks5x5')) {
           <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:left;">TOTAL RISIKO</td>
           <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"><?= $totalAwal ?></td>
           <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"><?= $totalAkhir ?></td>
-          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center; color:#3b82f6;">
-            <?= ($totalAkhir - $totalAwal) === 0 ? 'Lengkap (100%)' : (($totalAkhir < $totalAwal) ? ($totalAwal - $totalAkhir) . ' belum dievaluasi' : '+' . ($totalAkhir - $totalAwal)) ?>
-          </td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"></td>
         </tr>
       </tbody>
     </table>
@@ -912,14 +910,21 @@ if (!function_exists('laporanRenderPerbandinganMatriks5x5')) {
 
 if (!function_exists('laporanUpgradeDraftHtmlWithMatriks')) {
     /**
-     * Otomatis melengkapi draft lama yang belum memiliki Peta Matriks Risiko 5x5 pada Bab II.
+     * Otomatis melengkapi draft lama yang belum memiliki Peta Matriks Risiko 5x5 pada Bab II,
+     * serta memastikan kolom perubahan pada baris TOTAL RISIKO dikosongkan.
      */
     function laporanUpgradeDraftHtmlWithMatriks(mysqli $db, string $draftHtml, int $triwulan, string $tahun, array $unitKerjaList): string {
-        if (strpos($draftHtml, 'matriks-perbandingan-wrap') !== false) {
-            return $draftHtml;
+        $cleanDraft = preg_replace(
+            '/(<tr[^>]*>\s*<td[^>]*>\s*TOTAL RISIKO\s*<\/td>\s*<td[^>]*>.*?<\/td>\s*<td[^>]*>.*?<\/td>\s*)<td[^>]*>.*?<\/td>/is',
+            '$1<td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"></td>',
+            $draftHtml
+        );
+
+        if (strpos($cleanDraft, 'matriks-perbandingan-wrap') !== false) {
+            return $cleanDraft;
         }
 
-        $parts = preg_split('/(<\/table>)/i', $draftHtml, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $parts = preg_split('/(<\/table>)/i', $cleanDraft, -1, PREG_SPLIT_DELIM_CAPTURE);
         $newHtml = '';
         $unitIdx = 0;
         $totalUnits = count($unitKerjaList);
@@ -1062,7 +1067,7 @@ if (!function_exists('laporanAddPerbandinganMatriksDocx')) {
         $secSum->addCell(3400, ['bgColor' => 'F8FAFC'])->addText('TOTAL RISIKO', ['bold' => true, 'size' => 8]);
         $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText((string)$totalAwal, $fTableB, $pCenter);
         $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText((string)$totalAkhir, $fTableB, $pCenter);
-        $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText($totalAkhir === $totalAwal ? 'Lengkap (100%)' : ($totalAkhir < $totalAwal ? ($totalAwal - $totalAkhir) . ' belum dievaluasi' : '+' . ($totalAkhir - $totalAwal)), $fTableB, $pCenter);
+        $secSum->addCell(2200, ['bgColor' => 'F8FAFC'])->addText('', $fTableB, $pCenter);
         $section->addTextBreak(1);
     }
 }
@@ -3281,6 +3286,12 @@ if ($isGenerate) {
               <i class="fas fa-eye"></i>
               <span>Generate Laporan</span>
             </button>
+            <button type="button" class="btn btn-outline" id="btnSyncFresh"
+                    style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#0284c7; color:#0284c7;"
+                    title="Generate langsung dari data aplikasi terbaru (abaikan draft lama)">
+              <i class="fas fa-arrows-rotate"></i>
+              <span>Data Terbaru Aplikasi</span>
+            </button>
             <button type="button" class="btn btn-outline" id="btnUnduhPdf"
                     style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#dc2626; color:#dc2626;">
               <i class="fas fa-file-pdf"></i>
@@ -3296,10 +3307,6 @@ if ($isGenerate) {
               <i class="fas fa-pen-to-square"></i>
               <span>Edit Online</span>
             </button>
-            <span style="font-size:.8rem; color:var(--text-muted); margin-left:auto;">
-              <i class="fas fa-info-circle"></i>
-              Preview, unduh PDF, unduh Word (.docx), atau edit langsung di browser lalu simpan.
-            </span>
           </div>
         </form>
       </div>
@@ -3342,6 +3349,20 @@ if ($isGenerate) {
 
             window.open('<?= APP_URL ?>/?' + buildParams().toString(), '_blank');
         });
+
+        // Tombol Data Terbaru Aplikasi — buka laporan langsung dari data DB tanpa draft lama
+        var btnFresh = document.getElementById('btnSyncFresh');
+        if (btnFresh) {
+            btnFresh.addEventListener('click', function () {
+                var triwulan = document.getElementById('fTriwulan');
+                var tahun    = document.getElementById('fTahun');
+                if (!triwulan.value || !tahun.value) {
+                    form.reportValidity();
+                    return;
+                }
+                window.open('<?= APP_URL ?>/?' + buildParams({ ignore_draft: '1' }).toString(), '_blank');
+            });
+        }
 
         // Tombol Unduh PDF — buka laporan dan otomatis buka dialog simpan PDF
         var btnPdf = document.getElementById('btnUnduhPdf');

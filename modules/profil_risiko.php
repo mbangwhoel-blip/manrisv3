@@ -56,11 +56,11 @@ $syncProfilIndikator = static function (mysqli $db, int $idProfil, array $master
 // ── Handle POST ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf()) { setFlash('error','Token tidak valid'); header('Location: '.APP_URL.'/?page=profil_risiko'); exit; }
-    requireRole('Admin','Risk Manager','Pimpinan');
+    requireRole('Admin','Risk Manager','Pimpinan','Koordinator');
     $aksi = $_POST['aksi'] ?? '';
 
     if ($aksi === 'duplikasi_profil') {
-        requireRole('Admin', 'Risk Manager');
+        requireRole('Admin', 'Risk Manager', 'Koordinator');
         $sourceId = (int)($_POST['id_profil'] ?? 0);
         $newYear = trim($_POST['tahun_baru'] ?? date('Y'));
         $sourceStmt = $db->prepare('SELECT * FROM profil_risiko WHERE id=? LIMIT 1');
@@ -87,12 +87,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $copyIndicators = $db->prepare('INSERT INTO profil_risiko_indikator (id_profil,id_master,tahun,program,kegiatan,sasaran,indikator,target,satuan) SELECT ?,id_master,?,program,kegiatan,sasaran,indikator,target,satuan FROM profil_risiko_indikator WHERE id_profil=?');
         if ($copyIndicators) { $copyIndicators->bind_param('isi', $newProfileId, $newYear, $sourceId); $copyIndicators->execute(); $copyIndicators->close(); }
         logAktivitas('CREATE', 'profil_risiko', $newProfileId, 'Duplikasi profil dari ID '.$sourceId.' ke tahun '.$newYear);
+        invalidateLaporanMonevDraft($newYear);
         setFlash('success', 'Profil berhasil disalin sebagai draft kerja baru. P/D dan target residual dikembalikan ke nilai awal.');
         header('Location: '.APP_URL.'/?page=profil_risiko&id='.$newProfileId.'&tab=detail'); exit;
     }
 
     if ($aksi === 'simpan_header') {
-        requireRole('Admin','Risk Manager');
+        requireRole('Admin','Risk Manager','Koordinator');
         $id = (int)($_POST['id'] ?? 0);
         $f  = [
             'tahun'                 => trim($_POST['tahun'] ?? date('Y')),
@@ -141,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  $s->execute(); $s->close();
                  $syncProfilIndikator($db, $id, $masterIndicatorIds, $f['tahun'], $f['program'], $f['kegiatan'], $f['sasaran'], $f['indikator_kinerja'], $f['target']);
                 logAktivitas('UPDATE','profil_risiko',$id,'Update profil risiko '.$f['tahun']);
+                invalidateLaporanMonevDraft($f['tahun'] ?? date('Y'));
                 setFlash('success','Profil risiko berhasil diperbarui');
                 header('Location: '.APP_URL.'/?page=profil_risiko&id='.$id.'&tab=detail'); exit;
             } catch (Throwable $e) {
@@ -162,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  $s->execute(); $newId = $db->insert_id; $s->close();
                  $syncProfilIndikator($db, $newId, $masterIndicatorIds, $f['tahun'], $f['program'], $f['kegiatan'], $f['sasaran'], $f['indikator_kinerja'], $f['target']);
                 logAktivitas('CREATE','profil_risiko',$newId,'Buat profil risiko '.$f['tahun']);
+                invalidateLaporanMonevDraft($f['tahun'] ?? date('Y'));
                 setFlash('success','Profil risiko berhasil dibuat! Tambahkan detail risiko.');
                 header('Location: '.APP_URL.'/?page=profil_risiko&id='.$newId.'&tab=detail&open_detail=1'); exit;
             } catch (Throwable $e) {
@@ -173,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($aksi === 'simpan_detail') {
-        requireRole('Admin','Risk Manager');
+        requireRole('Admin','Risk Manager','Koordinator');
         $idProfil = (int)($_POST['id_profil'] ?? 0);
         $idDetail = (int)($_POST['id_detail'] ?? 0);
         $kodeRisiko = trim($_POST['kode_risiko'] ?? '');
@@ -277,12 +280,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: '.APP_URL.'/?page=profil_risiko&id='.$idProfil.'&tab=detail'); exit;
         }
         $s->close();
+        $sTh = $db->prepare('SELECT tahun FROM profil_risiko WHERE id=?');
+        $sTh->bind_param('i', $idProfil);
+        $sTh->execute();
+        $rTh = $sTh->get_result()->fetch_assoc();
+        $sTh->close();
+        invalidateLaporanMonevDraft($rTh['tahun'] ?? null);
         setFlash('success','Detail risiko berhasil disimpan');
         header('Location: '.APP_URL.'/?page=profil_risiko&id='.$idProfil.'&tab=detail'); exit;
     }
 
     if ($aksi === 'hapus_detail') {
-        requireRole('Admin','Risk Manager');
+        requireRole('Admin','Risk Manager','Koordinator');
         $idDetail = (int)($_POST['id_detail'] ?? 0);
         $idProfil = (int)($_POST['id_profil'] ?? 0);
         if (!ownsRecord($db, 'profil_risiko', $idProfil)) {
@@ -291,13 +300,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $s = $db->prepare('DELETE FROM profil_risiko_detail WHERE id=? AND id_profil=?');
         $s->bind_param('ii', $idDetail, $idProfil); $s->execute(); $s->close();
+        $sTh = $db->prepare('SELECT tahun FROM profil_risiko WHERE id=?');
+        $sTh->bind_param('i', $idProfil);
+        $sTh->execute();
+        $rTh = $sTh->get_result()->fetch_assoc();
+        $sTh->close();
+        invalidateLaporanMonevDraft($rTh['tahun'] ?? null);
         setFlash('success','Detail risiko dihapus');
         header('Location: '.APP_URL.'/?page=profil_risiko&id='.$idProfil.'&tab=detail'); exit;
     }
 
     if ($aksi === 'hapus_profil') {
         $id = (int)($_POST['id'] ?? 0);
-        if (!hasRole('Admin', 'Pimpinan')) {
+        if (!hasRole('Admin', 'Pimpinan', 'Koordinator') && !canAccessAllRecords()) {
             $sCheck = $db->prepare("SELECT created_by FROM profil_risiko WHERE id=?");
             $sCheck->bind_param("i", $id); $sCheck->execute();
             $rowCheck = $sCheck->get_result()->fetch_assoc(); $sCheck->close();
@@ -309,12 +324,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $s = $db->prepare('DELETE FROM profil_risiko WHERE id=?');
         $s->bind_param('i', $id); $s->execute(); $s->close();
         logAktivitas('DELETE','profil_risiko',$id,'Hapus profil risiko ID '.$id);
+        invalidateLaporanMonevDraft();
         setFlash('success','Profil risiko dihapus');
         header('Location: '.APP_URL.'/?page=profil_risiko'); exit;
     }
 
     if ($aksi === 'kirim_persetujuan') {
-        requireRole('Risk Manager');
+        requireRole('Risk Manager', 'Koordinator');
         $id = (int)($_POST['id'] ?? 0);
         $uid = (int)$_SESSION['user_id'];
         if (!ownsRecord($db, 'profil_risiko', $id)) {
@@ -400,7 +416,7 @@ $fTahun    = trim((string)($_GET['tahun'] ?? ''));
 $profilRow = null;
 if ($activeId > 0) {
     try {
-        $scope = hasRole('Admin', 'Pimpinan') ? '' : ' AND created_by = ?';
+        $scope = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? '' : ' AND created_by = ?';
         $s = $db->prepare('SELECT * FROM profil_risiko WHERE id=?'.$scope);
         if ($scope) { $uid = (int)$_SESSION['user_id']; $s->bind_param('ii',$activeId,$uid); } else $s->bind_param('i',$activeId);
         $s->execute();
@@ -416,7 +432,7 @@ $tahunList   = getDaftarTahun($db, 'profil_risiko', [$activeTahun]);
 // Cek apakah tabel profil_risiko ada & kolom tahun ada (fail-safe untuk hosting baru)
 $profilList = [];
 try {
-    $profil_cond = hasRole('Admin', 'Pimpinan') ? "WHERE 1=1" : "WHERE p.created_by = " . (int)$_SESSION['user_id'];
+    $profil_cond = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "WHERE 1=1" : "WHERE p.created_by = " . (int)$_SESSION['user_id'];
     if ($fTahun !== '') {
         $profil_cond .= " AND p.tahun = '" . $db->real_escape_string($fTahun) . "'";
     }
@@ -430,7 +446,7 @@ $detailRows  = [];
 $profilChecklist = [];
 $profilCompleteness = 0;
 // Hanya risiko yang sudah disetujui yang dapat masuk ke penilaian profil.
-$risikoCond = hasRole('Admin', 'Pimpinan') ? "" : " AND id_user_input = " . (int)$_SESSION['user_id'];
+$risikoCond = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "" : " AND id_user_input = " . (int)$_SESSION['user_id'];
 $risikoList  = $db->query("SELECT kode_risiko, nama_risiko, probabilitas, dampak_level AS dampak, approval_status FROM risiko WHERE deleted_at IS NULL AND (approval_status='approved' OR approval_status IS NULL) $risikoCond ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
 $risikoCount = count($risikoList);
 $editDetail  = null;
@@ -889,7 +905,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
     
     <?php if($activeId && $profilRow): ?>
     <div style="margin-top:12px; display:flex; gap:8px;">
-      <?php if (hasRole('Risk Manager') && in_array($profilStatus, ['Draft', 'Revisi'])): ?>
+      <?php if (hasRole('Risk Manager', 'Koordinator') && in_array($profilStatus, ['Draft', 'Revisi'])): ?>
            <form method="post" style="display:inline; margin:0;" onsubmit="return confirm('Ajukan Profil Risiko ini untuk persetujuan Pimpinan?\n\nSetelah diajukan, data tidak dapat diubah sampai Pimpinan memberikan keputusan (Disetujui/Revisi).');">
                <?= csrfField() ?>
                <input type="hidden" name="aksi" value="kirim_persetujuan">
@@ -934,8 +950,13 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
     <?php endif; ?>
     <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
     <?php $isLocked = isset($profilRow) && in_array($profilRow['status'] ?? '', ['Menunggu Persetujuan', 'Disetujui']); ?>
-    <?php if((!$activeId || !$profilRow) && hasRole('Admin','Risk Manager')): ?>
-     <button id="btnProfilBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i>Tambah Profil</button>
+    <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
+      <?php if(!$activeId || !$profilRow): ?>
+        <button id="btnProfilBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i>Tambah Profil</button>
+      <?php else: ?>
+        <button type="button" class="btn btn-hero-primary btn-standard-action" onclick="try{bukaModalDetail();}catch(e){openModal('modalDetailRisiko');}" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah Detail</button>
+        <button class="btn btn-hero-ghost btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-folder-plus"></i> Profil Baru</button>
+      <?php endif; ?>
     <?php endif; ?>
     </div>
   </div>
@@ -983,7 +1004,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         <i class="fas fa-shield-alt" style="font-size:3rem;color:var(--primary);opacity:.3;margin-bottom:16px;display:block"></i>
         <h3>Belum Ada Profil Risiko</h3>
         <p style="margin-top:8px; margin-bottom: 24px; color:var(--text-muted)">Sistem belum memiliki data profil risiko. Silakan buat profil pertama Anda.</p>
-        <?php if(hasRole('Admin','Risk Manager')): ?>
+        <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
         <button class="btn btn-primary" onclick="openModal('modalNewProfil')"><i class="fas fa-plus"></i> Buat Profil Baru</button>
         <?php endif; ?>
       </div>
@@ -1028,7 +1049,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         </div>
          <div style="display:flex;gap:8px">
            <button class="btn btn-outline" style="flex:1;justify-content:center;font-weight:600">Buka Profil <i class="fas fa-arrow-right" style="margin-left:8px;font-size:.8rem"></i></button>
-           <?php if(hasRole('Admin','Risk Manager')): ?>
+           <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
            <form method="post" style="margin:0" onsubmit="return duplicateProfil(event, this)">
              <?= csrfField() ?><input type="hidden" name="aksi" value="duplikasi_profil"><input type="hidden" name="id_profil" value="<?= $pl['id'] ?>"><input type="hidden" name="tahun_baru" value="">
              <button type="submit" class="btn btn-accent" title="Salin ke periode baru"><i class="fas fa-copy"></i></button>
@@ -1070,7 +1091,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         <span class="card-title" style="color:#fff;font-size:1rem"><i class="fas fa-shield-alt"></i> Profil Risiko — Tahun <?= xss($profilRow['tahun']) ?></span>
         <div style="color:rgba(255,255,255,.65);font-size:.78rem;margin-top:2px"><?= xss($profilRow['unit_pemilik_risiko']??'') ?></div>
       </div>
-      <?php if(hasRole('Admin','Risk Manager')): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="openModal('modalEditHeader')"><i class="fas fa-edit"></i> Edit</button>
       <?php endif; ?>
     </div>
@@ -1224,7 +1245,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
           <div style="background:rgba(255,255,255,.7);border-radius:8px;padding:8px 10px"><strong>4.</strong> Isi pengendalian, jadwal &amp; PJ</div>
         </div>
       </div>
-      <?php if(hasRole('Admin','Risk Manager')): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
       <div style="flex:0 0 auto">
         <?php if($risikoCount > 0): ?>
         <button type="button" class="btn btn-primary" onclick="try{bukaModalDetail();}catch(e){openModal('modalDetailRisiko');}">
@@ -1248,7 +1269,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
           <i class="fas fa-search"></i>
           <input type="text" class="form-control" id="searchDetailRisiko" value="<?= xss($_GET['q'] ?? '') ?>" placeholder="Cari detail risiko..." onkeyup="filterTableDetailRisiko()" style="height:38px">
         </div>
-        <?php if(hasRole('Admin','Risk Manager')): ?>
+        <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
         <?php if($risikoCount > 0): ?>
         <button type="button" class="btn btn-success" onclick="try{bukaModalDetail();}catch(e){openModal('modalDetailRisiko');}" style="height:38px;display:inline-flex;align-items:center;padding:0 16px;margin:0">
           <i class="fas fa-plus" style="margin-right:6px"></i> Tambah Detail Risiko
@@ -1281,7 +1302,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
           <col class="col-control">
           <col class="col-pic-jadwal">
           <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
-          <?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><col class="col-action"><?php endif; ?>
         </colgroup>
         <thead>
           <tr>
@@ -1292,7 +1313,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
             <th rowspan="2" class="col-control">Uraian Pengendalian</th>
             <th rowspan="2" class="col-pic-jadwal">PIC &amp; Jadwal</th>
             <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;font-weight:700;border-bottom:1px solid #bbf7d0">Target Penurunan Risiko</th>
-            <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
+            <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
           </tr>
           <tr>
             <th class="col-score" style="background:#edf2f7;text-align:center" title="Probabilitas">P</th>
@@ -1307,14 +1328,14 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         </thead>
         <tbody>
         <?php if(empty($detailRows)): ?>
-        <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 14 : 13 ?>"><div class="empty-state" style="padding:40px">
+        <tr><td colspan="<?= hasRole('Admin','Risk Manager','Koordinator') ? 14 : 13 ?>"><div class="empty-state" style="padding:40px">
           <i class="fas fa-table" style="font-size:2.5rem;opacity:.3;margin-bottom:12px;display:block"></i>
           <h3>Belum ada detail risiko</h3>
           <p style="margin-top:8px;color:var(--text-muted);max-width:480px;margin-left:auto;margin-right:auto">
             Tambahkan risiko dari master <strong>Identifikasi Risiko</strong> ke profil ini,
             lalu isi P/D awal, rencana penanganan, dan target penurunan.
           </p>
-          <?php if(hasRole('Admin','Risk Manager')): ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
           <div style="margin-top:20px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
             <?php if($risikoCount > 0): ?>
             <button type="button" class="btn btn-primary" onclick="bukaModalDetail()">
@@ -1385,7 +1406,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
               <?= xss($dr['target_tingkat_risiko']??'-') ?>
             </span>
           </td>
-          <?php if(hasRole('Admin','Risk Manager')): ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
           <td class="risiko-action-cell" style="text-align:center;white-space:nowrap">
             <div class="act-btn-group" style="justify-content:center">
               <button type="button" class="act-btn act-btn-edit"
@@ -1848,7 +1869,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
 </div>
 
 <!-- Modal Edit Header (jika sudah ada profil) -->
-<?php if($activeId && $profilRow && hasRole('Admin','Risk Manager')): ?>
+<?php if($activeId && $profilRow && hasRole('Admin','Risk Manager','Koordinator')): ?>
 <div class="modal-overlay" id="modalEditHeader" style="display:none">
   <div class="modal modal-lg">
     <div class="modal-header">

@@ -156,7 +156,15 @@ function requireLogin(): void {
  * Cek role user
  */
 function hasRole(string ...$roles): bool {
-    return in_array($_SESSION['user_role'] ?? '', $roles, true);
+    $userRole = $_SESSION['user_role'] ?? '';
+    if (in_array($userRole, $roles, true)) {
+        return true;
+    }
+    // Jika role Koordinator dicari, dukung juga akun dengan username 'koordinator'
+    if (in_array('Koordinator', $roles, true) && strtolower($_SESSION['user_username'] ?? '') === 'koordinator') {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -178,7 +186,50 @@ function requireMaintenanceAccess(): void {
 
 /** Admin dan pimpinan merupakan role lintas-unit; role lain hanya mengelola data miliknya. */
 function canAccessAllRecords(): bool {
-    return hasRole('Admin', 'Pimpinan', 'Koordinator');
+    return hasRole('Admin', 'Pimpinan', 'Koordinator') || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator');
+}
+
+/** Cek keberadaan tabel di database */
+if (!function_exists('tableExists')) {
+    function tableExists(mysqli $db, string $table): bool {
+        $safe = $db->real_escape_string($table);
+        $res = $db->query("SHOW TABLES LIKE '{$safe}'");
+        return $res && $res->num_rows > 0;
+    }
+}
+
+/**
+ * Invalidasi / bersihkan draft laporan monev statis agar laporan langsung otomatis terupdate
+ * saat ada isian baru atau perubahan data dari aplikasi.
+ */
+if (!function_exists('invalidateLaporanMonevDraft')) {
+    function invalidateLaporanMonevDraft(?string $tahun = null, ?int $triwulan = null): void {
+        try {
+            $db = getDB();
+            if (!$db || !tableExists($db, 'laporan_monev_draft')) {
+                return;
+            }
+            if ($tahun !== null && $triwulan !== null && $triwulan >= 1 && $triwulan <= 4) {
+                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ?");
+                if ($stmt) {
+                    $stmt->bind_param('si', $tahun, $triwulan);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            } elseif ($tahun !== null) {
+                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ?");
+                if ($stmt) {
+                    $stmt->bind_param('s', $tahun);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            } else {
+                $db->query("DELETE FROM laporan_monev_draft");
+            }
+        } catch (\Throwable $e) {
+            error_log('[manris] Invalidate draft error: ' . $e->getMessage());
+        }
+    }
 }
 
 /** Cek apakah user berhak mengakses dan mengelola fitur backup & restore (Admin, Risk Manager, Pimpinan/Kepala). */

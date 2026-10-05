@@ -106,7 +106,7 @@ if ($exportType === 'pdf') {
 
 // ── Handle POST ──────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!hasRole('Admin', 'Pimpinan', 'Risk Manager')) {
+    if (!hasRole('Admin', 'Pimpinan', 'Risk Manager', 'Koordinator')) {
         setFlash('error', 'Anda tidak memiliki akses untuk mengelola data IKK.');
         header('Location: ' . APP_URL . '/?page=ikk'); exit;
     }
@@ -147,16 +147,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAktivitas('CREATE', 'ikk', $newId, 'Tambah IKK tahun ' . $f['tahun']);
             setFlash('success', 'IKK berhasil ditambahkan');
         }
+        invalidateLaporanMonevDraft($f['tahun'] ?? null);
         header('Location: ' . APP_URL . '/?page=ikk&tahun=' . urlencode($f['tahun']));
         exit;
     }
 
     if ($aksi === 'hapus') {
         $id = (int)($_POST['id'] ?? 0);
+        $thPost = $_POST['tahun'] ?? null;
         $db->query("DELETE FROM ikk WHERE id=$id");
         logAktivitas('DELETE', 'ikk', $id, 'Hapus IKK ID ' . $id);
+        invalidateLaporanMonevDraft($thPost);
         setFlash('success', 'Data IKK dihapus');
-        header('Location: ' . APP_URL . '/?page=ikk' . (isset($_POST['tahun']) ? '&tahun=' . urlencode($_POST['tahun']) : ''));
+        header('Location: ' . APP_URL . '/?page=ikk' . ($thPost ? '&tahun=' . urlencode($thPost) : ''));
         exit;
     }
 }
@@ -200,7 +203,7 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
   </div>
   <div class="profil-hero-tools risiko-hero-tools-align">
     <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
-      <?php if(hasRole('Admin','Risk Manager','Pimpinan')): ?>
+      <?php if(hasRole('Admin','Risk Manager','Pimpinan','Koordinator')): ?>
       <select class="form-control hero-year-select" style="max-width:130px;width:auto;text-align:center;text-align-last:center;" onchange="if(this.value) window.location.href='<?= APP_URL ?>/?page=ikk&tahun='+encodeURIComponent(this.value)" aria-label="Pilih tahun">
         <?php foreach($tahunList as $y): ?>
         <option value="<?= xss($y) ?>" <?= (string)$tahunAktif === (string)$y ? 'selected' : '' ?> style="text-align:center;"><?= xss($y) ?></option>
@@ -211,7 +214,7 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
         <a href="<?= APP_URL ?>/?page=ikk&tahun=<?= urlencode($tahunAktif) ?>&export=excel" class="btn btn-hero-ghost"><i class="fas fa-file-excel"></i> Excel</a>
         <a href="<?= APP_URL ?>/?page=ikk&tahun=<?= urlencode($tahunAktif) ?>&export=pdf" target="_blank" class="btn btn-hero-ghost">&#128196; Cetak / PDF</a>
       </div>
-      <?php if(hasRole('Admin','Risk Manager')): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
       <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-hero-primary" onclick="openModal('modalIkk')" style="white-space:nowrap; margin:0;"><i class="fas fa-plus"></i> Tambah IKK</button>
       </div>
@@ -271,7 +274,7 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
   </div>
   <div class="table-responsive">
     <table class="data-table profil-detail-table ikk-data-table no-datatable" id="tableIkk">
-      <colgroup><col class="col-no"><col class="col-wide"><col class="col-wide"><col class="col-indicator"><col class="col-target"><col class="col-person"><col class="col-note"><?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?></colgroup>
+      <colgroup><col class="col-no"><col class="col-wide"><col class="col-wide"><col class="col-indicator"><col class="col-target"><col class="col-person"><col class="col-note"><?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><col class="col-action"><?php endif; ?></colgroup>
       <thead>
         <tr>
           <th class="col-no" style="text-align:center">No</th>
@@ -281,16 +284,16 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
           <th class="col-target">Target</th>
           <th class="col-person">Penanggung Jawab</th>
           <th class="col-note">Keterangan</th>
-          <?php if(hasRole('Admin','Risk Manager')): ?><th class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
       </thead>
       <tbody>
       <?php if(empty($rows)): ?>
-        <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 8 : 7 ?>">
+        <tr><td colspan="<?= hasRole('Admin','Risk Manager','Koordinator') ? 8 : 7 ?>">
           <div class="empty-state" style="padding:32px">
             <i class="fas fa-clipboard-check" style="font-size:2rem;opacity:.35;margin-bottom:8px;display:block"></i>
             <h3 style="font-size:1rem;margin:0 0 4px">Belum ada data IKK tahun <?= xss($tahunAktif) ?></h3>
-            <?php if(hasRole('Admin','Risk Manager')): ?>
+            <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
             <p style="margin:4px 0 12px;color:var(--text-muted);font-size:.75rem">Klik "Tambah IKK" untuk menambahkan data.</p>
             <button class="btn btn-primary" onclick="openModal('modalIkk')"><i class="fas fa-plus"></i> Tambah IKK</button>
             <?php endif; ?>
@@ -311,7 +314,7 @@ $ikPj = count(array_unique(array_filter(array_column($rows, 'penanggung_jawab'))
             </div>
           </td>
           <td style="color:var(--text-muted)"><?= xss($r['keterangan']??'-') ?></td>
-          <?php if(hasRole('Admin','Risk Manager')): ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
           <td class="ikk-action-cell" style="text-align:center;white-space:nowrap">
             <div class="act-btn-group">
               <button class="act-btn act-btn-edit" onclick='editIkk(<?= htmlspecialchars(json_encode($r),ENT_QUOTES) ?>)' title="Edit"><i class="fas fa-edit"></i></button>

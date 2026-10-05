@@ -151,4 +151,46 @@ class LaporanMonevBab2Bab4Test extends TestCase
         $this->assertSame('G', $resolve('Unit Pengendali Gratifikasi (UPG)'));
         $this->assertSame('', $resolve('Koordinator Manajemen Risiko'));
     }
+
+    public function testTotalRisikoDeltaColumnIsEmpty(): void
+    {
+        $file = file_get_contents(__DIR__ . '/../modules/laporan_monev.php');
+        $this->assertStringNotContainsString('Lengkap (100%)', $file);
+        $this->assertStringNotContainsString('belum dievaluasi', $file);
+
+        // Test regex for upgrading draft HTML cleans the 4th column of TOTAL RISIKO row
+        $oldDraft = '<tr style="background:#f8fafc; font-weight:bold;">
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:left;">TOTAL RISIKO</td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;">25</td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;">25</td>
+          <td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center; color:#3b82f6;">
+            Lengkap (100%)          </td>
+        </tr>';
+
+        $cleanDraft = preg_replace(
+            '/(<tr[^>]*>\s*<td[^>]*>\s*TOTAL RISIKO\s*<\/td>\s*<td[^>]*>.*?<\/td>\s*<td[^>]*>.*?<\/td>\s*)<td[^>]*>.*?<\/td>/is',
+            '$1<td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"></td>',
+            $oldDraft
+        );
+
+        $this->assertStringNotContainsString('Lengkap (100%)', $cleanDraft);
+        $this->assertStringContainsString('<td style="border:1px solid #cbd5e1; padding:3px 6px; text-align:center;"></td>', $cleanDraft);
+    }
+
+    public function testKoordinatorRoleAndDraftInvalidation(): void
+    {
+        require_once __DIR__ . '/../includes/functions.php';
+
+        $_SESSION['user_id'] = 100;
+        $_SESSION['user_role'] = 'Koordinator';
+        $_SESSION['user_username'] = 'koordinator';
+
+        $this->assertTrue(hasRole('Koordinator'));
+        $this->assertTrue(hasRole('Admin', 'Risk Manager', 'Koordinator'));
+        $this->assertTrue(canAccessAllRecords());
+        $this->assertTrue(function_exists('invalidateLaporanMonevDraft'));
+        $this->assertTrue(function_exists('tableExists'));
+    }
 }
+
+

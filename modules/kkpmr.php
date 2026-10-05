@@ -6,7 +6,7 @@
  */
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
-requireRole('Admin', 'Risk Manager', 'Pimpinan');
+requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator');
 $db = getDB();
 $monevStatusColumn = $db->query("SHOW COLUMNS FROM kkpr_risiko LIKE 'monev_status'");
 if ($monevStatusColumn && $monevStatusColumn->num_rows === 0) {
@@ -86,6 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             logAktivitas('UPDATE', 'kkpmr', $idRisiko, 'Update pemantauan risiko KKPR');
+            $kkprTahunQuery = $db->query("SELECT tahun FROM kkpr_header WHERE id = " . (int)$idKkpr);
+            $tahunKkpr = ($kkprTahunQuery && $tRow = $kkprTahunQuery->fetch_assoc()) ? $tRow['tahun'] : date('Y');
+            invalidateLaporanMonevDraft($tahunKkpr);
             setFlash('success', 'Hasil pemantauan disimpan');
         }
         header('Location: ' . APP_URL . '/?page=kkpmr&id=' . $idKkpr); exit;
@@ -109,6 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s = $db->prepare('UPDATE kkpr_header SET tgl_update=?, periode_risiko=?, nama_ttd_pemilik=?, nip_ttd_pemilik=?, nama_ttd_pengelola=?, nip_ttd_pengelola=? WHERE id=?');
             $s->bind_param('ssssssi', $tglPemantauan, $periodePemantauan, $namaTtdPemilik, $nipTtdPemilik, $namaTtdPengelola, $nipTtdPengelola, $idKkpr);
             $s->execute(); $s->close();
+            $kkprTahunQuery = $db->query("SELECT tahun FROM kkpr_header WHERE id = " . (int)$idKkpr);
+            $tahunKkpr = ($kkprTahunQuery && $tRow = $kkprTahunQuery->fetch_assoc()) ? $tRow['tahun'] : date('Y');
+            invalidateLaporanMonevDraft($tahunKkpr);
             setFlash('success', 'Header pemantauan diperbarui');
         }
         header('Location: ' . APP_URL . '/?page=kkpmr&id=' . $idKkpr . '&tab=header'); exit;
@@ -166,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Admin/Pimpinan bebas hapus; role lain hanya boleh hapus miliknya sendiri.
     if ($aksi === 'hapus_kkpmr') {
         $id = (int)($_POST['id'] ?? 0);
-        if (!hasRole('Admin', 'Pimpinan')) {
+        if (!canAccessAllRecords()) {
             $sCheck = $db->prepare("SELECT created_by FROM kkpr_header WHERE id=?");
             $sCheck->bind_param("i", $id); $sCheck->execute();
             $rowCheck = $sCheck->get_result()->fetch_assoc(); $sCheck->close();
@@ -217,7 +223,7 @@ if ($activeId > 0) {
 $activeTahun = (string)($kkprRow['tahun'] ?? ($fTahun !== '' ? $fTahun : date('Y')));
 $tahunList   = getDaftarTahun($db, 'kkpr_header', [$activeTahun]);
 
-$kkpr_cond = hasRole('Admin', 'Pimpinan') ? "WHERE 1=1" : "WHERE h.created_by = " . (int)$_SESSION['user_id'];
+$kkpr_cond = canAccessAllRecords() ? "WHERE 1=1" : "WHERE h.created_by = " . (int)$_SESSION['user_id'];
 if ($fTahun !== '') {
     $kkpr_cond .= " AND h.tahun = '" . $db->real_escape_string($fTahun) . "'";
 }
@@ -344,7 +350,7 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
     </div>
     <?php endif; ?>
     <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <?php if (hasRole('Admin', 'Risk Manager') && (!$activeId || !$kkprRow)): ?><a href="<?= APP_URL ?>/?page=kkpr&baru=1" class="btn btn-hero-primary btn-standard-action" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah KKPMR</a><?php endif; ?>
+      <?php if (hasRole('Admin', 'Risk Manager', 'Koordinator') && (!$activeId || !$kkprRow)): ?><a href="<?= APP_URL ?>/?page=kkpr&baru=1" class="btn btn-hero-primary btn-standard-action" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah KKPMR</a><?php endif; ?>
       <?php if (!empty($kkprList) && $activeId && $kkprRow): ?>
       <?php endif; ?>
     </div>
@@ -390,7 +396,7 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
     <i class="fas fa-inbox" style="font-size:2.5rem;opacity:.3"></i>
     <h3 style="margin:12px 0 4px">Belum ada KKPR</h3>
     <p style="color:var(--text-muted);font-size:.85rem">Buat Kertas Kerja Penilaian Risiko terlebih dahulu sebelum melakukan pemantauan.</p>
-    <?php if (hasRole('Admin', 'Risk Manager')): ?><a href="<?= APP_URL ?>/?page=kkpr&baru=1" class="btn btn-primary" style="margin-top:14px"><i class="fas fa-plus"></i> Tambah KKPMR</a><?php endif; ?>
+    <?php if (hasRole('Admin', 'Risk Manager', 'Koordinator')): ?><a href="<?= APP_URL ?>/?page=kkpr&baru=1" class="btn btn-primary" style="margin-top:14px"><i class="fas fa-plus"></i> Tambah KKPMR</a><?php endif; ?>
   </div>
 </div>
 <?php elseif (!$activeId): ?>
@@ -409,7 +415,7 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
         <div style="background:var(--surface2);padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:700;color:var(--text)">
           Tahun <?= xss($kl['tahun']) ?>
         </div>
-        <?php if(hasRole('Admin','Pimpinan','Risk Manager')): ?>
+        <?php if(hasRole('Admin','Pimpinan','Risk Manager', 'Koordinator')): ?>
         <form method="POST" action="<?= APP_URL ?>/?page=kkpmr" style="display:inline;margin:0" onclick="event.stopPropagation()" onsubmit="return confirm('Hapus KKPMR tahun <?= xss($kl['tahun']) ?>? Karena KKPMR & KKPR memakai record yg sama, KKPR-nya juga akan ikut terhapus.')">
           <?= csrfField() ?>
           <input type="hidden" name="aksi" value="hapus_kkpmr">

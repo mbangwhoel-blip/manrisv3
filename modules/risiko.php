@@ -23,12 +23,12 @@ if (!function_exists('normalizeSumberRisiko')) {
 // ── Handle POST ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf()) { setFlash('error','Token tidak valid'); header('Location: '.APP_URL.'/?page=risiko'); exit; }
-    requireRole('Admin','Risk Manager');
+    requireRole('Admin','Risk Manager','Koordinator');
 
     $aksi = $_POST['aksi'] ?? '';
 
     if (in_array($aksi, ['approve', 'reject'], true)) {
-        if (!hasRole('Admin', 'Risk Manager', 'Pimpinan')) {
+        if (!hasRole('Admin', 'Risk Manager', 'Pimpinan', 'Koordinator')) {
             setFlash('error', 'Anda tidak memiliki hak untuk memproses review risiko.');
             header('Location: '.APP_URL.'/?page=risiko'); exit;
         }
@@ -123,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $stmt->execute(); $stmt->close();
             logAktivitas('UPDATE','risiko',$id,'Update risiko: '.$fields['nama_risiko']);
+            invalidateLaporanMonevDraft();
             setFlash('success','Risiko berhasil diperbarui');
         } else {
             // INSERT — 18 kolom = 18 bind vars
@@ -196,11 +197,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             logAktivitas('CREATE','risiko',$newId,'Tambah risiko: '.$kode);
+            invalidateLaporanMonevDraft();
             setFlash('success','Risiko '.$kode.' berhasil ditambahkan');
         }
     } elseif ($aksi === 'hapus') {
         $id = (int)($_POST['id'] ?? 0);
-        requireRole('Admin', 'Risk Manager');
+        requireRole('Admin', 'Risk Manager', 'Koordinator');
 
         $stmt = $db->prepare('SELECT id, kode_risiko, nama_risiko, id_user_input, approval_status FROM risiko WHERE id=? AND deleted_at IS NULL');
         $stmt->bind_param('i', $id);
@@ -214,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Risk Manager hanya dapat menghapus risiko miliknya sendiri.
-        if (hasRole('Risk Manager') && !hasRole('Admin')
+        if (hasRole('Risk Manager') && !hasRole('Admin') && !hasRole('Koordinator') && !canAccessAllRecords()
             && (int)$risiko['id_user_input'] !== (int)$_SESSION['user_id']) {
             setFlash('error', 'Risk Manager hanya dapat menghapus risiko miliknya sendiri.');
             header('Location: '.APP_URL.'/?page=risiko'); exit;
@@ -246,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare('UPDATE risiko SET deleted_at=NOW(), deleted_by=? WHERE id=? AND deleted_at IS NULL');
             $stmt->bind_param('ii', $deletedBy, $id); $stmt->execute(); $stmt->close();
             logAktivitas('DELETE', 'risiko', $id, 'Soft delete risiko: ' . $risiko['kode_risiko'], $risiko, ['deleted_by' => $deletedBy]);
+            invalidateLaporanMonevDraft();
             setFlash('success', 'Risiko dinonaktifkan karena sudah disetujui atau digunakan dokumen; Admin dapat memulihkannya.');
         }
     }
@@ -264,7 +267,7 @@ $perPage   = (isset($_GET['limit']) && in_array((int)$_GET['limit'], [5, 10, 15,
 $showDeleted = hasRole('Admin') && isset($_GET['deleted']) && $_GET['deleted'] === '1';
 
 $where = [$showDeleted ? 'r.deleted_at IS NOT NULL' : 'r.deleted_at IS NULL'];
-if (!hasRole('Admin', 'Pimpinan')) {
+if (!hasRole('Admin', 'Pimpinan', 'Koordinator') && !canAccessAllRecords()) {
     $where[] = "r.id_user_input = " . (int)$_SESSION['user_id'];
 }
 $params = []; $types = '';
@@ -518,7 +521,7 @@ if ($detailId > 0) {
 
 
 // Hitung statistik global untuk hero (menggunakan kondisi role pengguna, abaikan filter saat ini)
-$globalWhere = hasRole('Admin', 'Pimpinan') ? "deleted_at IS NULL" : "deleted_at IS NULL AND id_user_input = " . (int)$_SESSION['user_id'];
+$globalWhere = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "deleted_at IS NULL" : "deleted_at IS NULL AND id_user_input = " . (int)$_SESSION['user_id'];
 $statHeroSql = "SELECT 
     COUNT(*) as total, 
     SUM(status = 'Aktif') as aktif,
@@ -537,7 +540,7 @@ $draftMaster = (int)$heroStats['draft'];
     <p class="page-sub">Catat master risiko (nama, sebab, dampak, unit). Penilaian P/D dan rencana penanganan diisi pada Profil Risiko.</p>
   </div>
   <div class="profil-hero-tools risiko-hero-tools-align">
-    <?php if(hasRole('Admin','Risk Manager')): ?>
+    <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
     <div class="risiko-export-actions" style="margin-top:0">
       <a href="<?= APP_URL ?>/?page=risiko&q=<?= urlencode($search) ?>&sumber=<?= urlencode($fSumber) ?>&status=<?= urlencode($fStatus) ?>&level=<?= urlencode($fLevel) ?>&departemen=<?= urlencode($fDept) ?>&export=excel" class="btn btn-hero-ghost"><i class="fas fa-file-excel"></i> Excel</a>
       <a href="<?= APP_URL ?>/?page=risiko&q=<?= urlencode($search) ?>&sumber=<?= urlencode($fSumber) ?>&status=<?= urlencode($fStatus) ?>&level=<?= urlencode($fLevel) ?>&departemen=<?= urlencode($fDept) ?>&export=pdf" target="_blank" class="btn btn-hero-ghost"><i class="fas fa-file-pdf"></i> PDF</a>
@@ -671,7 +674,7 @@ $draftMaster = (int)$heroStats['draft'];
           <td class="risiko-action-cell" style="text-align:center;white-space:nowrap">
             <div class="act-btn-group">
               <a href="?page=risiko&detail=<?= $r['id'] ?>&saran=1" class="act-btn act-btn-view" title="Detail & Saran"><i class="fas fa-eye"></i></a>
-              <?php if(hasRole('Admin','Risk Manager')): ?>
+              <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
               <button type="button" class="act-btn act-btn-edit" onclick='editRisiko(<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>)' title="Edit Risiko"><i class="fas fa-edit"></i></button>
               <button type="button" class="act-btn act-btn-delete" onclick="hapusRisiko(<?= $r['id'] ?>, '<?= xss($r['kode_risiko']) ?>')" title="Hapus Risiko"><i class="fas fa-trash"></i></button>
               <?php endif; ?>

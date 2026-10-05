@@ -8,7 +8,7 @@
  */
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
-requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Staff');
+requireRole('Admin', 'Risk Manager', 'Pimpinan', 'Staff', 'Koordinator');
 $db = getDB();
 $chkReal = $db->query("SHOW COLUMNS FROM monev_triwulan LIKE 'realisasi_pengendalian'");
 if ($chkReal && $chkReal->num_rows === 0) {
@@ -23,7 +23,7 @@ if (!in_array($activeTahun, $tahunList, true) && !empty($tahunList)) {
 $jenisLaporan = $_GET['jenis'] ?? 'tw1';
 if (!in_array($jenisLaporan, ['tw1', 'tw2', 'tw3', 'tw4', 'tahunan'], true)) $jenisLaporan = 'tw1';
 $twTarget = $jenisLaporan === 'tahunan' ? 4 : (int)substr($jenisLaporan, 2);
-$canInput = hasRole('Admin', 'Risk Manager', 'Staff');
+$canInput = hasRole('Admin', 'Risk Manager', 'Staff', 'Koordinator') || (strtolower($_SESSION['user_username'] ?? '') === 'koordinator');
 $jenisLabel = $jenisLaporan === 'tahunan' ? 'Monev Tahunan (Awal vs TW4)' : 'Monev Triwulan ' . $twTarget;
 // Tampilkan kolom hasil pengisian triwulan sebelumnya (TW n-1) untuk tw2-4 non-tahunan
 $showPrevQ = $twTarget > 1 && $jenisLaporan !== 'tahunan';
@@ -68,6 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksi'] ?? '') === 'simpan_
     $upsert = $db->prepare('INSERT INTO monev_triwulan (id_risiko,triwulan,pantau_p,pantau_d,pantau_bobot,pantau_nilai,pantau_tingkat,upaya_pengendalian,realisasi_pengendalian,link_data_dukung,simpulan_tingkat,efektifitas,kendala,rencana_tindak_lanjut,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE pantau_p=VALUES(pantau_p),pantau_d=VALUES(pantau_d),pantau_bobot=VALUES(pantau_bobot),pantau_nilai=VALUES(pantau_nilai),pantau_tingkat=VALUES(pantau_tingkat),upaya_pengendalian=VALUES(upaya_pengendalian),realisasi_pengendalian=VALUES(realisasi_pengendalian),link_data_dukung=VALUES(link_data_dukung),simpulan_tingkat=VALUES(simpulan_tingkat),efektifitas=VALUES(efektifitas),kendala=VALUES(kendala),rencana_tindak_lanjut=VALUES(rencana_tindak_lanjut),created_by=VALUES(created_by)');
     $upsert->bind_param('iiiddsssssssssi', $idRisiko, $twPost, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
     $upsert->execute(); $upsert->close();
+
+    // Otomatis invalidasi draft statis laporan monev agar laporan langsung otomatis update
+    invalidateLaporanMonevDraft($tahunPost, $twPost);
+    invalidateLaporanMonevDraft($tahunPost, null);
+
     setFlash('success', 'Monev berhasil disimpan.');
     header('Location: ' . APP_URL . '/?page=monev_tahunan&tahun=' . urlencode($tahunPost) . '&jenis=' . urlencode($jenisPost) . '#monev-table'); exit;
 }

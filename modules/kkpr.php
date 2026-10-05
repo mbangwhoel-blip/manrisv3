@@ -33,7 +33,7 @@ $workflowNotice .= ' Hanya risiko yang sudah disetujui yang dapat dimasukkan ke 
 // ── Handle POST ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf()) { setFlash('error','Token tidak valid'); header('Location: '.APP_URL.'/?page=kkpr'); exit; }
-    requireRole('Admin','Risk Manager');
+    requireRole('Admin','Risk Manager','Koordinator');
     $aksi = $_POST['aksi'] ?? '';
 
     if ($aksi === 'simpan_header') {
@@ -81,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s = $db->prepare('UPDATE kkpr_header SET tahun=?,unit_pemilik_risiko=?,nama_pemilik_risiko=?,nip_pemilik_risiko=?,nama_pengelola_risiko=?,nip_pengelola_risiko=?,tujuan=?,sasaran=?,indikator_kinerja=?,target=?,program=?,kegiatan=?,tgl_penilaian=?,periode_risiko=?,tgl_update=?,nama_ttd_pemilik=?,nip_ttd_pemilik=?,nama_ttd_pengelola=?,nip_ttd_pengelola=?,ttd_pemilik=?,ttd_pengelola=? WHERE id=?');
             $s->bind_param('sssssssssssssssssssssi',$f['tahun'],$f['unit_pemilik_risiko'],$f['nama_pemilik_risiko'],$f['nip_pemilik_risiko'],$f['nama_pengelola_risiko'],$f['nip_pengelola_risiko'],$f['tujuan'],$f['sasaran'],$f['indikator_kinerja'],$f['target'],$f['program'],$f['kegiatan'],$f['tgl_penilaian'],$f['periode_risiko'],$f['tgl_update'],$f['nama_ttd_pemilik'],$f['nip_ttd_pemilik'],$f['nama_ttd_pengelola'],$f['nip_ttd_pengelola'],$f['ttd_pemilik'],$f['ttd_pengelola'],$id);
             $s->execute(); $s->close();
+            invalidateLaporanMonevDraft($f['tahun'] ?? date('Y'));
             setFlash('success','KKPR berhasil diperbarui');
             header('Location: '.APP_URL.'/?page=kkpr&id='.$id.'&tab=detail'); exit;
         } else {
@@ -89,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s->bind_param('sssssssssssssssssssssi',$f['tahun'],$f['unit_pemilik_risiko'],$f['nama_pemilik_risiko'],$f['nip_pemilik_risiko'],$f['nama_pengelola_risiko'],$f['nip_pengelola_risiko'],$f['tujuan'],$f['sasaran'],$f['indikator_kinerja'],$f['target'],$f['program'],$f['kegiatan'],$f['tgl_penilaian'],$f['periode_risiko'],$f['tgl_update'],$f['nama_ttd_pemilik'],$f['nip_ttd_pemilik'],$f['nama_ttd_pengelola'],$f['nip_ttd_pengelola'],$f['ttd_pemilik'],$f['ttd_pengelola'],$uid);
             $s->execute(); $newId = $db->insert_id; $s->close();
             logAktivitas('CREATE','kkpr',$newId,'Buat KKPR '.$f['tahun']);
+            invalidateLaporanMonevDraft($f['tahun'] ?? date('Y'));
             setFlash('success','KKPR berhasil dibuat! Silakan tambah data risiko.');
             header('Location: '.APP_URL.'/?page=kkpr&id='.$newId.'&tab=detail'); exit;
         }
@@ -188,6 +190,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         }
         $s->execute(); $s->close();
+        $sTh = $db->prepare('SELECT tahun FROM kkpr_header WHERE id=?');
+        $sTh->bind_param('i', $idKkpr);
+        $sTh->execute();
+        $rTh = $sTh->get_result()->fetch_assoc();
+        $sTh->close();
+        invalidateLaporanMonevDraft($rTh['tahun'] ?? null);
         setFlash('success','Data risiko berhasil disimpan');
         header('Location: '.APP_URL.'/?page=kkpr&id='.$idKkpr.'&tab=detail'); exit;
     }
@@ -201,13 +209,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $s = $db->prepare('DELETE FROM kkpr_risiko WHERE id=? AND id_kkpr=?');
         $s->bind_param('ii', $idR, $idK); $s->execute(); $s->close();
+        $sTh = $db->prepare('SELECT tahun FROM kkpr_header WHERE id=?');
+        $sTh->bind_param('i', $idK);
+        $sTh->execute();
+        $rTh = $sTh->get_result()->fetch_assoc();
+        $sTh->close();
+        invalidateLaporanMonevDraft($rTh['tahun'] ?? null);
         setFlash('success','Data risiko dihapus');
         header('Location: '.APP_URL.'/?page=kkpr&id='.$idK.'&tab=detail'); exit;
     }
 
     if ($aksi === 'hapus_kkpr') {
         $id = (int)($_POST['id'] ?? 0);
-        if (!hasRole('Admin', 'Pimpinan')) {
+        if (!hasRole('Admin', 'Pimpinan', 'Koordinator') && !canAccessAllRecords()) {
             $sCheck = $db->prepare("SELECT created_by FROM kkpr_header WHERE id=?");
             $sCheck->bind_param("i", $id); $sCheck->execute();
             $rowCheck = $sCheck->get_result()->fetch_assoc(); $sCheck->close();
@@ -218,6 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $db->query("DELETE FROM kkpr_header WHERE id=$id");
         logAktivitas('DELETE','kkpr',$id,'Hapus KKPR ID '.$id);
+        invalidateLaporanMonevDraft();
         setFlash('success','KKPR dihapus');
         header('Location: '.APP_URL.'/?page=kkpr'); exit;
     }
@@ -297,12 +312,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $stmt->close();
         logAktivitas('IMPORT','kkpr',$idKkpr,"Impor $inserted risiko dari Profil (skip $skipped)");
+        $sTh = $db->prepare('SELECT tahun FROM kkpr_header WHERE id=?');
+        $sTh->bind_param('i', $idKkpr);
+        $sTh->execute();
+        $rTh = $sTh->get_result()->fetch_assoc();
+        $sTh->close();
+        invalidateLaporanMonevDraft($rTh['tahun'] ?? null);
         setFlash('success', $inserted.' risiko diimpor dari Profil'.($skipped>0 ? ', '.$skipped.' dilewati (duplikat)' : ''));
         header('Location: '.APP_URL.'/?page=kkpr&id='.$idKkpr.'&tab=detail'); exit;
     }
 
     if ($aksi === 'kirim_persetujuan_kkpr') {
-        requireRole('Risk Manager');
+        requireRole('Risk Manager', 'Koordinator');
         $id = (int)($_POST['id'] ?? 0);
         if (!ownsRecord($db, 'kkpr_header', $id)) {
             setFlash('error', 'Anda tidak berhak mengajukan persetujuan KKPR ini.');
@@ -385,7 +406,7 @@ if ($activeId > 0) {
 $activeTahun = (string)($kkprRow['tahun'] ?? ($fTahun !== '' ? $fTahun : date('Y')));
 $tahunList   = getDaftarTahun($db, 'kkpr_header', [$activeTahun]);
 
-$kkpr_cond = hasRole('Admin', 'Pimpinan') ? "WHERE 1=1" : "WHERE h.created_by = " . (int)$_SESSION['user_id'];
+$kkpr_cond = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "WHERE 1=1" : "WHERE h.created_by = " . (int)$_SESSION['user_id'];
 if ($fTahun !== '') {
     $kkpr_cond .= " AND h.tahun = '" . $db->real_escape_string($fTahun) . "'";
 }
@@ -478,7 +499,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
 
     <div style="margin-top:12px; display:flex; gap:8px;">
       <?php if(!empty($kkprList) && $activeId && $kkprRow): ?>
-          <?php if (hasRole('Risk Manager') && in_array($kkprStatus, ['Draft', 'Revisi'])): ?>
+          <?php if (hasRole('Risk Manager', 'Koordinator') && in_array($kkprStatus, ['Draft', 'Revisi'])): ?>
                <button class="btn btn-hero-primary" onclick="openModal('modalKirimPersetujuanKKPR')" style="padding:6px 14px; font-size:12px;"><i class="fas fa-paper-plane"></i> Ajukan Persetujuan</button>
           <?php elseif (hasRole('Pimpinan') && $kkprStatus === 'Menunggu Persetujuan'): ?>
               <form method="post" style="display:inline; margin:0;" onsubmit="return confirm('Setujui KKPR ini?');">
@@ -514,8 +535,13 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
   <?php endif; ?>
   <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
     <?php $isLockedKkpr = isset($kkprRow) && in_array($kkprRow['status_kkpr'] ?? '', ['Menunggu Persetujuan', 'Disetujui']); ?>
-    <?php if((!$activeId || !$kkprRow) && hasRole('Admin','Risk Manager')): ?>
-     <button id="btnKkprBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalKkprBaru')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah KKPR</button>
+    <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
+      <?php if(!$activeId || !$kkprRow): ?>
+        <button id="btnKkprBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalKkprBaru')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah KKPR</button>
+      <?php else: ?>
+        <button type="button" class="btn btn-hero-primary btn-standard-action" onclick="bukaModalKkprRisiko()" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus-circle"></i> Tambah Risiko</button>
+        <button class="btn btn-hero-ghost btn-standard-action" onclick="openModal('modalKkprBaru')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-folder-plus"></i> KKPR Baru</button>
+      <?php endif; ?>
     <?php endif; ?>
   </div>
   </div>
@@ -554,7 +580,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
   <a href="<?= APP_URL ?>/?page=kkpmr" class="risiko-flow-btn"><i class="fas fa-right-long"></i> Lanjut ke KKPMR</a>
 </div>
 
-<?php if (isset($_GET['baru']) && $_GET['baru'] === '1' && hasRole('Admin', 'Risk Manager')): ?>
+<?php if (isset($_GET['baru']) && $_GET['baru'] === '1' && hasRole('Admin', 'Risk Manager', 'Koordinator')): ?>
 <script>document.addEventListener('DOMContentLoaded', function () { openModal('modalKkprBaru'); });</script>
 <?php endif; ?>
 
@@ -568,7 +594,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         <i class="fas fa-clipboard-list" style="font-size:3rem;color:var(--warning);opacity:.3;margin-bottom:16px;display:block"></i>
         <h3>Belum Ada Data KKPR</h3>
         <p style="margin-top:8px; margin-bottom: 24px; color:var(--text-muted)">Sistem belum memiliki data Kertas Kerja Penilaian Risiko. Silakan buat KKPR pertama Anda.</p>
-        <?php if(hasRole('Admin','Risk Manager')): ?>
+        <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
         <button class="btn btn-primary" onclick="openModal('modalKkprBaru')"><i class="fas fa-plus"></i> Buat KKPR Baru</button>
         <?php endif; ?>
       </div>
@@ -590,7 +616,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
           <div style="background:var(--surface2);padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:700;color:var(--text)">
             Tahun <?= xss($kl['tahun']) ?>
           </div>
-          <?php if(hasRole('Admin','Pimpinan','Risk Manager')): ?>
+          <?php if(hasRole('Admin','Pimpinan','Risk Manager','Koordinator')): ?>
           <form method="POST" action="<?= APP_URL ?>/?page=kkpr" style="display:inline;margin:0" onclick="event.stopPropagation()" onsubmit="return confirm('Hapus KKPR tahun <?= xss($kl['tahun']) ?>? Semua data risiko di dalamnya juga akan dihapus.')">
             <?= csrfField() ?>
             <input type="hidden" name="aksi" value="hapus_kkpr">
@@ -652,7 +678,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         <span class="card-title" style="color:#fff;font-size:1rem"><i class="fas fa-file-invoice"></i> Info KKPR — <?= xss($kkprRow['tahun']) ?></span>
         <div style="color:rgba(255,255,255,.65);font-size:.78rem;margin-top:2px"><?= xss($kkprRow['unit_pemilik_risiko']??'') ?></div>
       </div>
-      <?php if(hasRole('Admin','Risk Manager')): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="openModal('modalKkprEdit')"><i class="fas fa-edit"></i> Edit</button>
       <?php endif; ?>
     </div>
@@ -785,7 +811,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
 
 <!-- Tabel -->
 <div class="card" id="kkprDataRisiko">
-  <?php if(hasRole('Admin','Risk Manager') && $activeId && $kkprRow): ?>
+  <?php if(hasRole('Admin','Risk Manager','Koordinator') && $activeId && $kkprRow): ?>
   <!-- Bar Impor dari Profil -->
   <div style="padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <i class="fas fa-file-import" style="color:var(--success)"></i>
@@ -794,6 +820,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
       <option value="">-- Pilih Profil --</option>
     </select>
     <button type="button" class="btn btn-xs btn-success" style="padding:8px 12px" onclick="importDetailFromProfil()"><i class="fas fa-download"></i> Impor Sekaligus</button>
+    <button type="button" class="btn btn-xs btn-primary" style="padding:8px 12px" onclick="bukaModalKkprRisiko()"><i class="fas fa-plus-circle"></i> Tambah Risiko</button>
   </div>
   <?php endif; ?>
   <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -824,7 +851,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
         <col class="col-choice"><col class="col-choice"><col class="col-control"><col class="col-schedule">
         <col class="col-score"><col class="col-score"><col class="col-val"><col class="col-level">
-        <?php if(hasRole('Admin','Risk Manager')): ?><col class="col-action"><?php endif; ?>
+        <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><col class="col-action"><?php endif; ?>
       </colgroup>
       <thead>
         <tr>
@@ -836,7 +863,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
           <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a">EVALUASI RISIKO</th>
           <th colspan="2" style="text-align:center;background:#e0e7ff;color:#3730a3;border-bottom:1px solid #c7d2fe">RPR</th>
           <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;border-bottom:1px solid #bbf7d0">TARGET</th>
-          <?php if(hasRole('Admin','Risk Manager')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
         </tr>
         <tr>
           <th style="min-width:120px">Sebab</th>
@@ -861,7 +888,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
       </thead>
       <tbody>
       <?php if(empty($rows)): ?>
-      <tr><td colspan="<?= hasRole('Admin','Risk Manager') ? 22 : 21 ?>"><div class="empty-state"><i class="fas fa-table"></i><h3>Belum ada data</h3></div></td></tr>
+      <tr><td colspan="<?= hasRole('Admin','Risk Manager','Koordinator') ? 22 : 21 ?>"><div class="empty-state"><i class="fas fa-table"></i><h3>Belum ada data</h3></div></td></tr>
       <?php else: ?>
       <?php foreach($rows as $r):
         $bgT  = kkprBg($r['tingkat_risiko']??'Rendah');
@@ -918,7 +945,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         <td style="text-align:center">
           <span style="background:<?= $bgTT ?>;color:<?= $clTT ?>;padding:3px 7px;border-radius:10px;font-weight:700;font-size:.68rem;display:inline-block;white-space:nowrap"><?= xss($r['target_tingkat']??'-') ?></span>
         </td>
-        <?php if(hasRole('Admin','Risk Manager')): ?>
+        <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
         <td class="kkpr-action-cell" style="text-align:center;white-space:nowrap">
           <div class="act-btn-group" style="justify-content:center">
           <?php if($isLockedKkpr): ?>
@@ -1282,7 +1309,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
   </div>
 </div>
 
-<?php if($activeId && $kkprRow && hasRole('Admin','Risk Manager')): ?>
+<?php if($activeId && $kkprRow && hasRole('Admin','Risk Manager','Koordinator')): ?>
 <!-- Modal Edit Header -->
 <div class="modal-overlay" id="modalKkprEdit" style="display:none">
   <div class="modal modal-lg">
