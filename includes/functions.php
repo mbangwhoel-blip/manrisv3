@@ -206,20 +206,22 @@ if (!function_exists('invalidateLaporanMonevDraft')) {
     function invalidateLaporanMonevDraft(?string $tahun = null, ?int $triwulan = null): void {
         try {
             $db = getDB();
-            if (!$db || !tableExists($db, 'laporan_monev_draft')) {
+            if (!$db) {
                 return;
             }
             if ($tahun !== null && $triwulan !== null && $triwulan >= 1 && $triwulan <= 4) {
-                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ?");
+                $t = trim((string)$tahun);
+                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE (TRIM(tahun) = ? OR tahun = ?) AND triwulan = ?");
                 if ($stmt) {
-                    $stmt->bind_param('si', $tahun, $triwulan);
+                    $stmt->bind_param('ssi', $t, $t, $triwulan);
                     $stmt->execute();
                     $stmt->close();
                 }
             } elseif ($tahun !== null) {
-                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ?");
+                $t = trim((string)$tahun);
+                $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE TRIM(tahun) = ? OR tahun = ?");
                 if ($stmt) {
-                    $stmt->bind_param('s', $tahun);
+                    $stmt->bind_param('ss', $t, $t);
                     $stmt->execute();
                     $stmt->close();
                 }

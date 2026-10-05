@@ -67,21 +67,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $uid = $_SESSION['user_id'];
         
         if ($res) {
-            $sq = "UPDATE monev_triwulan SET pantau_p=?, pantau_d=?, pantau_bobot=?, pantau_nilai=?, pantau_tingkat=?, upaya_pengendalian=?, realisasi_pengendalian=?, link_data_dukung=?, simpulan_tingkat=?, efektifitas=?, kendala=?, rencana_tindak_lanjut=?, created_by=? WHERE id=?";
+            $sq = "UPDATE monev_triwulan SET pantau_p=?, pantau_d=?, pantau_bobot=?, pantau_nilai=?, pantau_tingkat=?, upaya_pengendalian=?, realisasi_pengendalian=?, link_data_dukung=?, simpulan_tingkat=?, efektifitas=?, kendala=?, rencana_tindak_lanjut=?, created_by=? WHERE id_risiko=? AND triwulan=?";
             $s = $db->prepare($sq);
-            $s->bind_param("iiddssssssssii", $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid, $res['id']);
+            $s->bind_param("iiddssssssssiii", $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid, $idRisiko, $triwulan);
             $s->execute();
         } else {
             $sq = "INSERT INTO monev_triwulan (id_risiko, triwulan, pantau_p, pantau_d, pantau_bobot, pantau_nilai, pantau_tingkat, upaya_pengendalian, realisasi_pengendalian, link_data_dukung, simpulan_tingkat, efektifitas, kendala, rencana_tindak_lanjut, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $s = $db->prepare($sq);
             $s->bind_param("iiiiddssssssssi", $idRisiko, $triwulan, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
             $s->execute();
-        }
+        } if ($triwulan === 1) { $uKkpr = $db->prepare("UPDATE kkpr_risiko SET pantau_p=?, pantau_d=?, pantau_bobot=?, pantau_nilai=?, pantau_tingkat=?, simpulan=?, efektifitas=?, monev_status='Sudah Dipantau' WHERE id=?"); if ($uKkpr) { $uKkpr->bind_param("iiddsssi", $pp, $pd, $pb, $pNilai, $pTingkat, $simpulan, $efektifitas, $idRisiko); $uKkpr->execute(); $uKkpr->close(); } }
         setFlash('success', 'Monev Triwulan '.$triwulan.' berhasil disimpan.');
         $kkprTahunQuery = $db->query("SELECT tahun FROM kkpr_header WHERE id = " . (int)$idKkpr);
         $tahunKkpr = ($kkprTahunQuery && $tRow = $kkprTahunQuery->fetch_assoc()) ? $tRow['tahun'] : date('Y');
         invalidateLaporanMonevDraft($tahunKkpr, $triwulan);
-        invalidateLaporanMonevDraft($tahunKkpr, null);
+        invalidateLaporanMonevDraft($tahunKkpr, null); invalidateLaporanMonevDraft(null, null);
         header('Location: ' . APP_URL . '/?page=monev_triwulan&id=' . $idKkpr . '&tw=' . $triwulan); exit;
     }
 }

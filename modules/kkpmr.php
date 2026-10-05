@@ -78,6 +78,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s = $db->prepare('UPDATE kkpr_risiko SET pantau_p=?,pantau_d=?,pantau_bobot=?,pantau_nilai=?,pantau_tingkat=?,simpulan=?,efektifitas=?,monev_status=? WHERE id=? AND id_kkpr=?');
             $s->bind_param('iiddssssii', $pp, $pd, $pb, $pNilai, $pTingkat, $simpulan, $efektifitas, $monevStatus, $idRisiko, $idKkpr);
             $s->execute(); $s->close();
+
+            // Sinkronkan ke tabel monev_triwulan (TW 1) agar laporan_monev langsung terupdate
+            $chkMonev = $db->prepare("SELECT id FROM monev_triwulan WHERE id_risiko = ? AND triwulan = 1 LIMIT 1");
+            $chkMonev->bind_param("i", $idRisiko); $chkMonev->execute();
+            $mRow = $chkMonev->get_result()->fetch_assoc(); $chkMonev->close();
+            if ($mRow) {
+                $uMonev = $db->prepare("UPDATE monev_triwulan SET pantau_p=?, pantau_d=?, pantau_bobot=?, pantau_nilai=?, pantau_tingkat=?, simpulan_tingkat=?, efektifitas=? WHERE id_risiko=? AND triwulan=1");
+                $uMonev->bind_param("iiddsssi", $pp, $pd, $pb, $pNilai, $pTingkat, $simpulan, $efektifitas, $idRisiko);
+                $uMonev->execute(); $uMonev->close();
+            } else {
+                $iMonev = $db->prepare("INSERT INTO monev_triwulan (id_risiko, triwulan, pantau_p, pantau_d, pantau_bobot, pantau_nilai, pantau_tingkat, simpulan_tingkat, efektifitas, created_by) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $uidVal = (int)($_SESSION['user_id'] ?? 0);
+                $iMonev->bind_param("iiiiddsssi", $idRisiko, $pp, $pd, $pb, $pNilai, $pTingkat, $simpulan, $efektifitas, $uidVal);
+                $iMonev->execute(); $iMonev->close();
+            }
+
             if ($simpulan === 'Peningkatan') {
                 $owner = $db->prepare('SELECT h.created_by, h.tahun, r.kode_risiko, r.nama_risiko FROM kkpr_header h JOIN kkpr_risiko r ON r.id_kkpr=h.id WHERE h.id=? AND r.id=? LIMIT 1');
                 $owner->bind_param('ii', $idKkpr, $idRisiko); $owner->execute(); $ownerRow = $owner->get_result()->fetch_assoc(); $owner->close();
@@ -88,7 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAktivitas('UPDATE', 'kkpmr', $idRisiko, 'Update pemantauan risiko KKPR');
             $kkprTahunQuery = $db->query("SELECT tahun FROM kkpr_header WHERE id = " . (int)$idKkpr);
             $tahunKkpr = ($kkprTahunQuery && $tRow = $kkprTahunQuery->fetch_assoc()) ? $tRow['tahun'] : date('Y');
-            invalidateLaporanMonevDraft($tahunKkpr);
+            invalidateLaporanMonevDraft($tahunKkpr, 1);
+            invalidateLaporanMonevDraft($tahunKkpr, null);
+            invalidateLaporanMonevDraft(null, null);
             setFlash('success', 'Hasil pemantauan disimpan');
         }
         header('Location: ' . APP_URL . '/?page=kkpmr&id=' . $idKkpr); exit;

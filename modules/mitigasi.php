@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sql.=' WHERE id=?'; $types.='i'; $params[]=$id;
             $s=$db->prepare($sql); $s->bind_param($types,...$params); $s->execute(); $s->close();
             logAktivitas('UPDATE','mitigasi',$id,'Update mitigasi ID '.$id);
-            setFlash('success','Mitigasi berhasil diperbarui');
+            invalidateLaporanMonevDraft(); setFlash('success','Mitigasi berhasil diperbarui');
         } else {
             $sql='INSERT INTO mitigasi (id_risiko,aksi,pic,deadline,status,biaya,catatan,bukti_file,ttd_file,ttd_data) VALUES (?,?,?,?,?,?,?,?,?,?)';
             $s=$db->prepare($sql); $s->bind_param('issssdssss',$idRisiko,$fields['aksi'],$fields['pic'],$fields['deadline'],$fields['status'],$fields['biaya'],$fields['catatan'],$buktiFn,$ttdFn,$ttdData);
@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Update status risiko jika ada mitigasi baru
             $db->query("UPDATE risiko SET status='Ditangani' WHERE id=$idRisiko AND status='Teridentifikasi'");
             logAktivitas('CREATE','mitigasi',$newId,'Tambah mitigasi untuk risiko ID '.$idRisiko);
-            setFlash('success','Mitigasi berhasil ditambahkan');
+            invalidateLaporanMonevDraft(); setFlash('success','Mitigasi berhasil ditambahkan');
         }
     } elseif ($aksi === 'hapus') {
         requireRole('Admin','Risk Manager','Koordinator');
@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $del = $db->prepare('DELETE FROM mitigasi WHERE id=?');
         $del->bind_param('i', $id); $del->execute(); $del->close();
         logAktivitas('DELETE','mitigasi',$id,'Hapus mitigasi ID '.$id);
-        setFlash('success','Mitigasi dihapus');
+        invalidateLaporanMonevDraft(); setFlash('success','Mitigasi dihapus');
     }
     $redir = (int)($_POST['id_risiko'] ?? 0);
     header('Location: '.APP_URL.'/?page=mitigasi'.($redir?"&risiko_id=$redir":'')); exit;

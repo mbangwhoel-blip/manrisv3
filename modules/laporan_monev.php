@@ -424,6 +424,7 @@ if (!function_exists('laporanGetDataUnit')) {
         $prevTriwulan = $triwulan - 1;
         if ($prefix !== '') {
             $prefixPattern = $prefix . '.%';
+            $prefixDash    = $prefix . '-%';
             if ($triwulan > 1) {
                 $sql = "
                     SELECT
@@ -433,23 +434,35 @@ if (!function_exists('laporanGetDataUnit')) {
                         COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
                         COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
                         COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
-                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        CASE
+                            WHEN TRIM(m.upaya_pengendalian) IS NOT NULL AND TRIM(m.upaya_pengendalian) != '' AND TRIM(m.upaya_pengendalian) != '-' THEN TRIM(m.upaya_pengendalian)
+                            WHEN TRIM(r.pengendalian_uraian) IS NOT NULL AND TRIM(r.pengendalian_uraian) != '' AND TRIM(r.pengendalian_uraian) != '-' THEN TRIM(r.pengendalian_uraian)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS upaya_pengendalian,
                         COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
                         COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
                         COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
                         COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
-                        COALESCE(m.kendala, '')                                                 AS kendala,
-                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
+                        CASE
+                            WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                            ELSE ''
+                        END AS kendala,
+                        CASE
+                            WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
                     LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
-                    WHERE h.tahun = ?
-                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
+                    WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('iisssss', $prevTriwulan, $triwulan, $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike);
+                $stmt->bind_param('iisssssss', $prevTriwulan, $triwulan, $tahun, $tahun, $prefixPattern, $prefixDash, $prefix, $unitLike, $rawUnitLike);
             } else {
                 $sql = "
                     SELECT
@@ -459,22 +472,34 @@ if (!function_exists('laporanGetDataUnit')) {
                         r.dampak_level        AS awal_d,
                         r.nilai_risiko        AS awal_nilai,
                         r.tingkat_risiko      AS awal_tingkat,
-                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        CASE
+                            WHEN TRIM(m.upaya_pengendalian) IS NOT NULL AND TRIM(m.upaya_pengendalian) != '' AND TRIM(m.upaya_pengendalian) != '-' THEN TRIM(m.upaya_pengendalian)
+                            WHEN TRIM(r.pengendalian_uraian) IS NOT NULL AND TRIM(r.pengendalian_uraian) != '' AND TRIM(r.pengendalian_uraian) != '-' THEN TRIM(r.pengendalian_uraian)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS upaya_pengendalian,
                         COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
                         COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
                         COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
                         COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
-                        COALESCE(m.kendala, '')                                                 AS kendala,
-                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
+                        CASE
+                            WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                            ELSE ''
+                        END AS kendala,
+                        CASE
+                            WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
-                    WHERE h.tahun = ?
-                      AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
+                    WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
+                      AND (r.kode_risiko LIKE ? OR r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('isssss', $triwulan, $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike);
+                $stmt->bind_param('isssssss', $triwulan, $tahun, $tahun, $prefixPattern, $prefixDash, $prefix, $unitLike, $rawUnitLike);
             }
         } else {
             if ($triwulan > 1) {
@@ -486,23 +511,35 @@ if (!function_exists('laporanGetDataUnit')) {
                         COALESCE(mp.pantau_d, r.dampak_level)         AS awal_d,
                         COALESCE(mp.pantau_nilai, r.nilai_risiko)     AS awal_nilai,
                         COALESCE(mp.pantau_tingkat, r.tingkat_risiko) AS awal_tingkat,
-                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        CASE
+                            WHEN TRIM(m.upaya_pengendalian) IS NOT NULL AND TRIM(m.upaya_pengendalian) != '' AND TRIM(m.upaya_pengendalian) != '-' THEN TRIM(m.upaya_pengendalian)
+                            WHEN TRIM(r.pengendalian_uraian) IS NOT NULL AND TRIM(r.pengendalian_uraian) != '' AND TRIM(r.pengendalian_uraian) != '-' THEN TRIM(r.pengendalian_uraian)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS upaya_pengendalian,
                         COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
                         COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
                         COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
                         COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
-                        COALESCE(m.kendala, '')                                                 AS kendala,
-                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
+                        CASE
+                            WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                            ELSE ''
+                        END AS kendala,
+                        CASE
+                            WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan mp ON mp.id_risiko = r.id AND mp.triwulan = ?
                     LEFT JOIN monev_triwulan m  ON m.id_risiko  = r.id AND m.triwulan = ?
-                    WHERE h.tahun = ?
+                    WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
                       AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('iisss', $prevTriwulan, $triwulan, $tahun, $unitLike, $rawUnitLike);
+                $stmt->bind_param('iissss', $prevTriwulan, $triwulan, $tahun, $tahun, $unitLike, $rawUnitLike);
             } else {
                 $sql = "
                     SELECT
@@ -512,22 +549,34 @@ if (!function_exists('laporanGetDataUnit')) {
                         r.dampak_level        AS awal_d,
                         r.nilai_risiko        AS awal_nilai,
                         r.tingkat_risiko      AS awal_tingkat,
-                        COALESCE(m.upaya_pengendalian, r.pengendalian_uraian, r.rpti_uraian, '') AS upaya_pengendalian,
+                        CASE
+                            WHEN TRIM(m.upaya_pengendalian) IS NOT NULL AND TRIM(m.upaya_pengendalian) != '' AND TRIM(m.upaya_pengendalian) != '-' THEN TRIM(m.upaya_pengendalian)
+                            WHEN TRIM(r.pengendalian_uraian) IS NOT NULL AND TRIM(r.pengendalian_uraian) != '' AND TRIM(r.pengendalian_uraian) != '-' THEN TRIM(r.pengendalian_uraian)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS upaya_pengendalian,
                         COALESCE(m.pantau_p, r.pantau_p, r.target_p, r.probabilitas)            AS akhir_p,
                         COALESCE(m.pantau_d, r.pantau_d, r.target_d, r.dampak_level)            AS akhir_d,
                         COALESCE(m.pantau_nilai, r.pantau_nilai, r.target_nilai, r.nilai_risiko) AS akhir_nilai,
                         COALESCE(m.pantau_tingkat, r.pantau_tingkat, r.target_tingkat, r.tingkat_risiko) AS akhir_tingkat,
-                        COALESCE(m.kendala, '')                                                 AS kendala,
-                        COALESCE(m.rencana_tindak_lanjut, r.rpti_uraian, '')                   AS rencana_tindak_lanjut
+                        CASE
+                            WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                            ELSE ''
+                        END AS kendala,
+                        CASE
+                            WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                            ELSE ''
+                        END AS rencana_tindak_lanjut
                     FROM kkpr_risiko r
                     INNER JOIN kkpr_header h ON h.id = r.id_kkpr
                     LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
-                    WHERE h.tahun = ?
+                    WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
                       AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
                     ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
                 ";
                 $stmt = $db->prepare($sql);
-                $stmt->bind_param('isss', $triwulan, $tahun, $unitLike, $rawUnitLike);
+                $stmt->bind_param('issss', $triwulan, $tahun, $tahun, $unitLike, $rawUnitLike);
             }
         }
 
@@ -555,38 +604,57 @@ if (!function_exists('laporanGetAggregat')) {
         $rawUnitLike = '%' . $unitKerja . '%';
 
         if ($prefix !== '') {
-            $prefixPattern = $prefix . '.%';
+            $prefixDot  = $prefix . '.%';
+            $prefixDash = $prefix . '-%';
             $sql = "
-                SELECT DISTINCT m.{$kolom}
-                FROM monev_triwulan m
-                INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
+                SELECT DISTINCT 
+                    CASE 
+                        WHEN '{$kolom}' = 'rencana_tindak_lanjut' THEN
+                            CASE
+                                WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                                WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                                ELSE ''
+                            END
+                        ELSE
+                            CASE
+                                WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                                ELSE ''
+                            END
+                    END AS val
+                FROM kkpr_risiko r
                 INNER JOIN kkpr_header h ON h.id = r.id_kkpr
-                WHERE h.tahun = ?
-                  AND (r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
-                  AND m.triwulan = ?
-                  AND m.{$kolom} IS NOT NULL
-                  AND m.{$kolom} <> ''
-                  AND TRIM(m.{$kolom}) <> '-'
-                ORDER BY m.{$kolom}
+                LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
+                WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
+                  AND (r.kode_risiko LIKE ? OR r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
+                ORDER BY val ASC
             ";
             $stmt = $db->prepare($sql);
-            $stmt->bind_param('sssssi', $tahun, $prefixPattern, $prefix, $unitLike, $rawUnitLike, $triwulan);
+            $stmt->bind_param('isssssss', $triwulan, $tahun, $tahun, $prefixDot, $prefixDash, $prefix, $unitLike, $rawUnitLike);
         } else {
             $sql = "
-                SELECT DISTINCT m.{$kolom}
-                FROM monev_triwulan m
-                INNER JOIN kkpr_risiko r ON r.id = m.id_risiko
+                SELECT DISTINCT 
+                    CASE 
+                        WHEN '{$kolom}' = 'rencana_tindak_lanjut' THEN
+                            CASE
+                                WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                                WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
+                                ELSE ''
+                            END
+                        ELSE
+                            CASE
+                                WHEN TRIM(m.kendala) IS NOT NULL AND TRIM(m.kendala) != '' AND TRIM(m.kendala) != '-' THEN TRIM(m.kendala)
+                                ELSE ''
+                            END
+                    END AS val
+                FROM kkpr_risiko r
                 INNER JOIN kkpr_header h ON h.id = r.id_kkpr
-                WHERE h.tahun = ?
+                LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
+                WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
                   AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
-                  AND m.triwulan = ?
-                  AND m.{$kolom} IS NOT NULL
-                  AND m.{$kolom} <> ''
-                  AND TRIM(m.{$kolom}) <> '-'
-                ORDER BY m.{$kolom}
+                ORDER BY val ASC
             ";
             $stmt = $db->prepare($sql);
-            $stmt->bind_param('sssi', $tahun, $unitLike, $rawUnitLike, $triwulan);
+            $stmt->bind_param('issss', $triwulan, $tahun, $tahun, $unitLike, $rawUnitLike);
         }
 
         $stmt->execute();
@@ -602,6 +670,7 @@ if (!function_exists('laporanGetAggregat')) {
         return $values;
     }
 }
+
 
 if (!function_exists('laporanHitungStatistik')) {
     function laporanHitungStatistik(array $rows): array {
@@ -1155,9 +1224,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
     $db = getDB();
     laporanEnsureDraftTable($db);
 
-    $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ?");
+    $stmt = $db->prepare("DELETE FROM laporan_monev_draft WHERE (TRIM(tahun) = ? OR tahun = ?) AND (triwulan = ? OR ? = 0)");
     if ($stmt) {
-        $stmt->bind_param('si', $postTahun, $postTriwulan);
+        $stmt->bind_param('ssii', $postTahun, $postTahun, $postTriwulan, $postTriwulan);
         $stmt->execute();
         $stmt->close();
     }
@@ -1229,12 +1298,15 @@ if ($isGenerate && $format === 'docx') {
     $db = getDB();
     laporanEnsureDraftTable($db);
     $draftRow = null;
-    $stmt = $db->prepare("SELECT konten_html FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ? LIMIT 1");
-    if ($stmt) {
-        $stmt->bind_param('si', $tahun, $triwulan);
-        $stmt->execute();
-        $draftRow = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
+    $useDraft = (($_GET['draft'] ?? '') === '1' || ($_GET['mode'] ?? '') === 'draft');
+    if ($useDraft) {
+        $stmt = $db->prepare("SELECT konten_html FROM laporan_monev_draft WHERE (TRIM(tahun) = ? OR tahun = ?) AND triwulan = ? LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param('ssi', $tahun, $tahun, $triwulan);
+            $stmt->execute();
+            $draftRow = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
     }
 
     if (!empty($draftRow['konten_html'])) {
@@ -1612,20 +1684,29 @@ if ($isGenerate) {
 
     $draftRow = null;
     $ignoreDraft = ($_GET['ignore_draft'] ?? '') === '1';
-    if (!$ignoreDraft) {
-        $stmt = $db->prepare("SELECT konten_html, updated_at FROM laporan_monev_draft WHERE tahun = ? AND triwulan = ? LIMIT 1");
-        if ($stmt) {
-            $stmt->bind_param('si', $tahun, $triwulan);
-            $stmt->execute();
-            $draftRow = $stmt->get_result()->fetch_assoc();
-            $stmt->close();
-        }
+    $explicitDraft = (($_GET['draft'] ?? '') === '1' || ($_GET['mode'] ?? '') === 'draft');
+
+    // Draft hanya dimuat jika user secara eksplisit meminta draft (&draft=1/&mode=draft)
+    // ATAU sedang dalam Mode Edit Online (&edit=1) untuk melanjutkan pengeditan manual.
+    // Untuk tampilan standar / klik "Generate Laporan", SELALU render data LIVE TERBARU dari database.
+    $shouldLoadDraft = ($explicitDraft || $isEdit) && !$ignoreDraft;
+
+    $stmt = $db->prepare("SELECT konten_html, updated_at FROM laporan_monev_draft WHERE (TRIM(tahun) = ? OR tahun = ?) AND triwulan = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param('ssi', $tahun, $tahun, $triwulan);
+        $stmt->execute();
+        $draftRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
     }
-    $hasSavedDraft  = !empty($draftRow['konten_html']);
-    if ($hasSavedDraft) {
+
+    $hasSavedDraftInDb = !empty($draftRow['konten_html']);
+    if ($hasSavedDraftInDb) {
         $draftRow['konten_html'] = laporanUpgradeDraftHtmlWithMatriks($db, (string)$draftRow['konten_html'], $triwulan, $tahun, $unitKerjaList);
     }
-    $draftUpdatedAt = $hasSavedDraft ? $draftRow['updated_at'] : null;
+    $draftUpdatedAt = $hasSavedDraftInDb ? $draftRow['updated_at'] : null;
+
+    // Konten yang di-render adalah draft HANYA jika shouldLoadDraft dan ada draft di DB:
+    $hasSavedDraft = $shouldLoadDraft && $hasSavedDraftInDb;
 
     // ── Mode Word (.doc) — kirim header unduhan Word ──────────
     if ($isWordDoc) {
@@ -2549,19 +2630,31 @@ if ($isGenerate) {
       <i class="fas fa-floppy-disk" aria-hidden="true"></i>
       Simpan
     </button>
-    <button type="button" class="btn-print btn-reset" id="btnResetDraft" style="<?= $hasSavedDraft ? '' : 'display:none;' ?>">
-      <i class="fas fa-rotate-left" aria-hidden="true"></i>
-      Kembali ke Data Asli
-    </button>
+    <?php if ($hasSavedDraft): ?>
+      <a href="<?= APP_URL ?>/?page=laporan_monev&generate=1&tahun=<?= urlencode($tahun) ?>&triwulan=<?= $triwulan ?>&ignore_draft=1" class="btn-print btn-outline" style="border-color:#38bdf8; color:#0284c7;" title="Tampilkan data aplikasi saat ini">
+        <i class="fas fa-arrows-rotate"></i> Beralih ke Data Asli
+      </a>
+      <button type="button" class="btn-print btn-reset" id="btnResetDraft" title="Hapus draft dari database dan kembali ke data asli">
+        <i class="fas fa-rotate-left"></i> Reset Draft
+      </button>
+    <?php elseif ($hasSavedDraftInDb): ?>
+      <a href="<?= APP_URL ?>/?page=laporan_monev&generate=1&tahun=<?= urlencode($tahun) ?>&triwulan=<?= $triwulan ?>&draft=1" class="btn-print btn-outline" style="border-color:#fbbf24; color:#d97706;" title="Buka versi draft yang pernah diedit online">
+        <i class="fas fa-file-pen"></i> Buka Draft Tersimpan
+      </a>
+      <button type="button" class="btn-print btn-reset" id="btnHapusDraftDb" title="Hapus draft agar tidak menyimpan versi lama">
+        <i class="fas fa-trash-can"></i> Hapus Draft
+      </button>
+    <?php endif; ?>
+
     <button type="button" class="btn-print btn-exit" id="btnKeluar" title="Keluar / Tutup Laporan">
       <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
       Keluar
     </button>
     <span class="status-text" id="statusDraft">
       <?php if ($hasSavedDraft): ?>
-        <i class="fas fa-check-circle" style="color:#4ade80;"></i> Versi tersimpan (<?= date('d/m/Y H:i', strtotime($draftUpdatedAt)) ?>)
+        <i class="fas fa-pen-to-square" style="color:#fbbf24;"></i> Menampilkan Draft Tersimpan (<?= date('d/m/Y H:i', strtotime($draftUpdatedAt)) ?>)
       <?php else: ?>
-        <i class="fas fa-database" style="color:#93c5fd;"></i> Data sistem
+        <i class="fas fa-circle-check" style="color:#4ade80;"></i> Data Terbaru Aplikasi (Sinkron Otomatis)
       <?php endif; ?>
     </span>
   </div>
@@ -3078,38 +3171,54 @@ if ($isGenerate) {
           });
       }
 
-      // Tombol Reset ke Data Asli
+      // Tombol Reset ke Data Asli / Hapus Draft
+      var handleResetDraft = function (btnElement) {
+          if (!confirm('Apakah Anda yakin ingin menghapus draft tersimpan dan kembali ke data asli sistem? Data draft yang sudah disimpan akan dihapus.')) return;
+          if (btnElement) {
+              btnElement.disabled = true;
+              btnElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menghapus...';
+          }
+
+          var fd = new FormData();
+          fd.append('action', 'reset_draft');
+          fd.append('csrf_token', csrfToken);
+          fd.append('tahun', tahun);
+          fd.append('triwulan', triwulan);
+
+          fetch('<?= APP_URL ?>/?page=laporan_monev', {
+              method: 'POST',
+              body: fd,
+              credentials: 'same-origin'
+          }).then(function (res) {
+              return res.json().then(function (j) {
+                  if (!res.ok || !j.ok) throw new Error(j.message || 'Gagal reset');
+                  return j;
+              });
+          }).then(function () {
+              try { localStorage.removeItem(draftKey); } catch (e) {}
+              var url = new URL(window.location.href);
+              url.searchParams.delete('edit');
+              url.searchParams.delete('draft');
+              url.searchParams.delete('mode');
+              window.location.href = url.toString();
+          }).catch(function (err) {
+              alert('Gagal mengembalikan data: ' + err.message);
+              if (btnElement) {
+                  btnElement.disabled = false;
+                  btnElement.innerHTML = '<i class="fas fa-rotate-left"></i> Reset Draft';
+              }
+          });
+      };
+
       if (btnReset) {
           btnReset.addEventListener('click', function () {
-              if (!confirm('Apakah Anda yakin ingin membatalkan semua perubahan dan kembali ke data asli sistem? Data yang sudah disimpan akan dihapus.')) return;
-              btnReset.disabled = true;
-              btnReset.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mereset...';
-
-              var fd = new FormData();
-              fd.append('action', 'reset_draft');
-              fd.append('csrf_token', csrfToken);
-              fd.append('tahun', tahun);
-              fd.append('triwulan', triwulan);
-
-              fetch('<?= APP_URL ?>/?page=laporan_monev', {
-                  method: 'POST',
-                  body: fd,
-                  credentials: 'same-origin'
-              }).then(function (res) {
-                  return res.json().then(function (j) {
-                      if (!res.ok || !j.ok) throw new Error(j.message || 'Gagal reset');
-                      return j;
-                  });
-              }).then(function () {
-                  try { localStorage.removeItem(draftKey); } catch (e) {}
-                  var url = new URL(window.location.href);
-                  url.searchParams.delete('edit');
-                  window.location.href = url.toString();
-              }).catch(function (err) {
-                  alert('Gagal mengembalikan data: ' + err.message);
-                  btnReset.disabled = false;
-                  btnReset.innerHTML = '<i class="fas fa-rotate-left"></i> Kembali ke Data Asli';
-              });
+              handleResetDraft(btnReset);
+          });
+      }
+      var btnHapusDb = document.getElementById('btnHapusDraftDb');
+      if (btnHapusDb) {
+          btnHapusDb.addEventListener('click', function () {
+              handleResetDraft(btnHapusDb);
           });
       }
 
@@ -3199,6 +3308,7 @@ if ($isGenerate) {
               onsubmit="this.action='<?= APP_URL ?>/?page=laporan_monev&amp;generate=1';">
           <input type="hidden" name="page"     value="laporan_monev">
           <input type="hidden" name="generate" value="1">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
 
           <!-- Baris 1: Triwulan + Tahun -->
           <div class="form-row-2" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:0;">
@@ -3307,6 +3417,12 @@ if ($isGenerate) {
               <i class="fas fa-pen-to-square"></i>
               <span>Edit Online</span>
             </button>
+            <button type="button" class="btn btn-outline" id="btnResetDraftForm"
+                    style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#94a3b8; color:#64748b;"
+                    title="Hapus draft online tersimpan untuk periode ini agar laporan selalu bersih dari data terbaru">
+              <i class="fas fa-trash-can"></i>
+              <span>Hapus Draft Periode</span>
+            </button>
           </div>
         </form>
       </div>
@@ -3409,6 +3525,56 @@ if ($isGenerate) {
                 }
 
                 window.open('<?= APP_URL ?>/?' + buildParams({ edit: '1' }).toString(), '_blank');
+            });
+        }
+
+        // Tombol Hapus Draft Periode dari Form
+        var btnResetForm = document.getElementById('btnResetDraftForm');
+        if (btnResetForm) {
+            btnResetForm.addEventListener('click', function () {
+                var triwulan = document.getElementById('fTriwulan');
+                var tahun    = document.getElementById('fTahun');
+
+                if (!triwulan.value || !tahun.value) {
+                    form.reportValidity();
+                    return;
+                }
+
+                if (!confirm('Hapus draft tersimpan untuk Triwulan ' + triwulan.value + ' Tahun ' + tahun.value + ' agar laporan menampilkan data asli terbaru dari aplikasi?')) {
+                    return;
+                }
+
+                btnResetForm.disabled = true;
+                btnResetForm.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Menghapus...</span>';
+
+                var csrfTokenInput = form.querySelector('input[name="csrf_token"]');
+                var csrfVal = csrfTokenInput ? csrfTokenInput.value : '';
+
+                var fd = new FormData();
+                fd.append('action', 'reset_draft');
+                fd.append('csrf_token', csrfVal);
+                fd.append('tahun', tahun.value);
+                fd.append('triwulan', triwulan.value);
+
+                fetch('<?= APP_URL ?>/?page=laporan_monev', {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin'
+                }).then(function (res) {
+                    return res.json().then(function (j) {
+                        if (!res.ok || !j.ok) throw new Error(j.message || 'Gagal menghapus draft');
+                        return j;
+                    });
+                }).then(function () {
+                    alert('Draft tersimpan untuk periode ini berhasil dihapus. Laporan akan menggunakan data sistem terbaru.');
+                    btnResetForm.disabled = false;
+                    btnResetForm.innerHTML = '<i class="fas fa-trash-can"></i> <span>Hapus Draft Periode</span>';
+                    form.submit();
+                }).catch(function (err) {
+                    alert('Gagal menghapus draft: ' + err.message);
+                    btnResetForm.disabled = false;
+                    btnResetForm.innerHTML = '<i class="fas fa-trash-can"></i> <span>Hapus Draft Periode</span>';
+                });
             });
         }
     })();

@@ -65,13 +65,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksi'] ?? '') === 'simpan_
     $simpulan = $pNilai < $previousValue ? 'Tingkat risiko mengalami penurunan' : ($pNilai > $previousValue ? 'Tingkat risiko mengalami peningkatan' : 'Tingkat risiko tetap');
     $efektifitas = $pNilai < $previousValue ? 'Efektif' : 'Tidak Efektif';
     $uid = (int)$_SESSION['user_id'];
-    $upsert = $db->prepare('INSERT INTO monev_triwulan (id_risiko,triwulan,pantau_p,pantau_d,pantau_bobot,pantau_nilai,pantau_tingkat,upaya_pengendalian,realisasi_pengendalian,link_data_dukung,simpulan_tingkat,efektifitas,kendala,rencana_tindak_lanjut,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE pantau_p=VALUES(pantau_p),pantau_d=VALUES(pantau_d),pantau_bobot=VALUES(pantau_bobot),pantau_nilai=VALUES(pantau_nilai),pantau_tingkat=VALUES(pantau_tingkat),upaya_pengendalian=VALUES(upaya_pengendalian),realisasi_pengendalian=VALUES(realisasi_pengendalian),link_data_dukung=VALUES(link_data_dukung),simpulan_tingkat=VALUES(simpulan_tingkat),efektifitas=VALUES(efektifitas),kendala=VALUES(kendala),rencana_tindak_lanjut=VALUES(rencana_tindak_lanjut),created_by=VALUES(created_by)');
-    $upsert->bind_param('iiiddsssssssssi', $idRisiko, $twPost, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
-    $upsert->execute(); $upsert->close();
+    $chkMonev = $db->prepare('SELECT id FROM monev_triwulan WHERE id_risiko=? AND triwulan=? LIMIT 1');
+    $chkMonev->bind_param('ii', $idRisiko, $twPost); $chkMonev->execute();
+    $hasMonevRow = (bool)$chkMonev->get_result()->fetch_assoc(); $chkMonev->close();
+    if ($hasMonevRow) {
+        $uM = $db->prepare('UPDATE monev_triwulan SET pantau_p=?,pantau_d=?,pantau_bobot=?,pantau_nilai=?,pantau_tingkat=?,upaya_pengendalian=?,realisasi_pengendalian=?,link_data_dukung=?,simpulan_tingkat=?,efektifitas=?,kendala=?,rencana_tindak_lanjut=?,created_by=? WHERE id_risiko=? AND triwulan=?');
+        $uM->bind_param('iiddssssssssiii', $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid, $idRisiko, $twPost);
+        $uM->execute(); $uM->close();
+    } else {
+        $iM = $db->prepare('INSERT INTO monev_triwulan (id_risiko,triwulan,pantau_p,pantau_d,pantau_bobot,pantau_nilai,pantau_tingkat,upaya_pengendalian,realisasi_pengendalian,link_data_dukung,simpulan_tingkat,efektifitas,kendala,rencana_tindak_lanjut,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $iM->bind_param('iiiddsssssssssi', $idRisiko, $twPost, $pp, $pd, $pb, $pNilai, $pTingkat, $upaya, $realisasi, $link, $simpulan, $efektifitas, $kendala, $rtl, $uid);
+        $iM->execute(); $iM->close();
+    }
+    if ($twPost === 1) { $uKkpr = $db->prepare("UPDATE kkpr_risiko SET pantau_p=?, pantau_d=?, pantau_bobot=?, pantau_nilai=?, pantau_tingkat=?, simpulan=?, efektifitas=?, monev_status='Sudah Dipantau' WHERE id=?"); if ($uKkpr) { $uKkpr->bind_param("iiddsssi", $pp, $pd, $pb, $pNilai, $pTingkat, $simpulan, $efektifitas, $idRisiko); $uKkpr->execute(); $uKkpr->close(); } }
 
     // Otomatis invalidasi draft statis laporan monev agar laporan langsung otomatis update
     invalidateLaporanMonevDraft($tahunPost, $twPost);
-    invalidateLaporanMonevDraft($tahunPost, null);
+    invalidateLaporanMonevDraft($tahunPost, null); invalidateLaporanMonevDraft(null, null);
 
     setFlash('success', 'Monev berhasil disimpan.');
     header('Location: ' . APP_URL . '/?page=monev_tahunan&tahun=' . urlencode($tahunPost) . '&jenis=' . urlencode($jenisPost) . '#monev-table'); exit;
