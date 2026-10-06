@@ -280,6 +280,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: '.APP_URL.'/?page=profil_risiko&id='.$idProfil.'&tab=detail'); exit;
         }
         $s->close();
+
+        // Otomatis sinkronkan uraian pengendalian & jadwal ke KKPR jika masih kosong
+        if ($f2['kode_risiko'] !== '' && $f2['rencana_penanganan'] !== '') {
+            $upKkpr = $db->prepare("UPDATE kkpr_risiko SET pengendalian_uraian=CASE WHEN pengendalian_uraian IS NULL OR pengendalian_uraian='' THEN ? ELSE pengendalian_uraian END, rpti_uraian=CASE WHEN rpti_uraian IS NULL OR rpti_uraian='' THEN ? ELSE rpti_uraian END WHERE kode_risiko=?");
+            if ($upKkpr) {
+                $upKkpr->bind_param('sss', $f2['rencana_penanganan'], $f2['rencana_penanganan'], $f2['kode_risiko']);
+                $upKkpr->execute();
+                $upKkpr->close();
+            }
+        }
+        if ($f2['kode_risiko'] !== '' && $f2['jadwal_pelaksanaan'] !== '') {
+            $upKkprJ = $db->prepare("UPDATE kkpr_risiko SET rpti_jadwal=? WHERE kode_risiko=? AND (rpti_jadwal IS NULL OR rpti_jadwal='')");
+            if ($upKkprJ) {
+                $upKkprJ->bind_param('ss', $f2['jadwal_pelaksanaan'], $f2['kode_risiko']);
+                $upKkprJ->execute();
+                $upKkprJ->close();
+            }
+        }
         $sTh = $db->prepare('SELECT tahun FROM profil_risiko WHERE id=?');
         $sTh->bind_param('i', $idProfil);
         $sTh->execute();
@@ -446,8 +464,21 @@ $detailRows  = [];
 $profilChecklist = [];
 $profilCompleteness = 0;
 // Hanya risiko yang sudah disetujui yang dapat masuk ke penilaian profil.
-$risikoCond = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "" : " AND id_user_input = " . (int)$_SESSION['user_id'];
-$risikoList  = $db->query("SELECT kode_risiko, nama_risiko, probabilitas, dampak_level AS dampak, approval_status FROM risiko WHERE deleted_at IS NULL AND (approval_status='approved' OR approval_status IS NULL) $risikoCond ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
+$risikoCond = (hasRole('Admin', 'Pimpinan', 'Koordinator') || canAccessAllRecords()) ? "" : " AND r.id_user_input = " . (int)$_SESSION['user_id'];
+$risikoList  = $db->query("SELECT r.kode_risiko, r.nama_risiko, r.probabilitas, r.dampak_level AS dampak, r.approval_status,
+    (SELECT d.rencana_penanganan FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.rencana_penanganan != '' ORDER BY d.id DESC LIMIT 1) AS last_rencana,
+    (SELECT d.jadwal_pelaksanaan FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.jadwal_pelaksanaan != '' ORDER BY d.id DESC LIMIT 1) AS last_jadwal,
+    (SELECT d.penanggungjawab FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.penanggungjawab != '' ORDER BY d.id DESC LIMIT 1) AS last_pj,
+    (SELECT d.target_p FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_p > 0 ORDER BY d.id DESC LIMIT 1) AS last_tp,
+    (SELECT d.target_d FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_d > 0 ORDER BY d.id DESC LIMIT 1) AS last_td,
+    (SELECT d.target_bobot FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_bobot > 0 ORDER BY d.id DESC LIMIT 1) AS last_tb,
+    (SELECT k.pengendalian_uraian FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.pengendalian_uraian != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_peng_uraian,
+    (SELECT k.rpti_uraian FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.rpti_uraian != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_rpti_uraian,
+    (SELECT k.rpti_jadwal FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.rpti_jadwal != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_jadwal,
+    (SELECT k.target_p FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.target_p > 0 ORDER BY k.id DESC LIMIT 1) AS kkpr_tp,
+    (SELECT k.target_d FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.target_d > 0 ORDER BY k.id DESC LIMIT 1) AS kkpr_td,
+    (SELECT k.target_bobot FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.target_bobot > 0 ORDER BY k.id DESC LIMIT 1) AS kkpr_tb
+FROM risiko r WHERE r.deleted_at IS NULL AND (r.approval_status='approved' OR r.approval_status IS NULL) $risikoCond ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
 $risikoCount = count($risikoList);
 $editDetail  = null;
 
@@ -471,7 +502,10 @@ $usersWithNip = $db->query("SELECT nama, nip FROM users WHERE aktif=1 AND role !
         // Detail profil ditambahkan secara sadar dari master Identifikasi Risiko.
         // Tidak ada sinkronisasi otomatis agar P/D dan rencana penanganan tidak tertimpa.
         try {
-            $s2 = $db->prepare("SELECT * FROM profil_risiko_detail WHERE id_profil=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC");
+            $s2 = $db->prepare("SELECT d.*,
+                (SELECT COALESCE(NULLIF(r.rpti_uraian, ''), r.pengendalian_uraian) FROM kkpr_risiko r WHERE r.kode_risiko = d.kode_risiko AND (r.rpti_uraian != '' OR r.pengendalian_uraian != '') ORDER BY r.id DESC LIMIT 1) AS kkpr_uraian,
+                (SELECT r.rpti_jadwal FROM kkpr_risiko r WHERE r.kode_risiko = d.kode_risiko AND r.rpti_jadwal != '' ORDER BY r.id DESC LIMIT 1) AS kkpr_jadwal
+            FROM profil_risiko_detail d WHERE d.id_profil=? ORDER BY SUBSTRING_INDEX(d.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(d.kode_risiko, '.', -1) AS UNSIGNED) ASC, d.kode_risiko ASC");
             $s2->bind_param('i',$activeId); $s2->execute();
             $detailRows = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
         } catch (Throwable $e) {
@@ -482,12 +516,12 @@ $usersWithNip = $db->query("SELECT nama, nip FROM users WHERE aktif=1 AND role !
         $headerComplete = count(array_filter($headerFields, static fn(string $field): bool => trim((string)($profilRow[$field] ?? '')) !== ''));
         $detailTotal = count($detailRows);
         $detailScored = count(array_filter($detailRows, static fn(array $row): bool => $row['probabilitas'] !== null && $row['dampak'] !== null && $row['nilai'] !== null));
-        $detailPlan = count(array_filter($detailRows, static fn(array $row): bool => trim((string)($row['rencana_penanganan'] ?? '')) !== '' && trim((string)($row['penanggungjawab'] ?? '')) !== ''));
+        $detailPlan = count(array_filter($detailRows, static fn(array $row): bool => trim((string)($row['rencana_penanganan'] ?: ($row['kkpr_uraian'] ?? ''))) !== '' && trim((string)($row['penanggungjawab'] ?? '')) !== ''));
         $detailTarget = count(array_filter($detailRows, static fn(array $row): bool => $row['target_p'] !== null && $row['target_d'] !== null));
         $missingPlanPic = [];
         foreach ($detailRows as $detailRow) {
             $missing = [];
-            if (trim((string)($detailRow['rencana_penanganan'] ?? '')) === '') $missing[] = 'Uraian Pengendalian';
+            if (trim((string)($detailRow['rencana_penanganan'] ?: ($detailRow['kkpr_uraian'] ?? ''))) === '') $missing[] = 'Uraian Pengendalian';
             if (trim((string)($detailRow['penanggungjawab'] ?? '')) === '') $missing[] = 'PIC';
             if ($missing) $missingPlanPic[] = ($detailRow['kode_risiko'] ?? $detailRow['nama_risiko'] ?? 'Risiko') . ': ' . implode(' dan ', $missing);
         }
@@ -926,7 +960,7 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
     <?php endif; ?>
 
   </div>
-  <div class="profil-hero-tools risiko-hero-tools-align">
+  <div class="profil-hero-tools risiko-hero-tools-align" style="display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
     <select class="form-control hero-year-select" style="max-width:130px;width:auto;text-align:center;text-align-last:center;" onchange="if(this.value) window.location.href='<?= APP_URL ?>/?page=profil_risiko&tahun='+encodeURIComponent(this.value)" aria-label="Pilih tahun">
        <?php foreach($tahunList as $y): ?>
        <option value="<?= xss($y) ?>" <?= (string)$y === (string)$activeTahun ? 'selected' : '' ?> style="text-align:center;"><?= xss($y) ?></option>
@@ -945,20 +979,13 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         <option value="tw4" style="text-align: left;">Laporan Triwulan IV</option>
         <option value="tahunan" style="text-align: left;">Laporan Tahunan</option>
       </select>
-
     </div>
     <?php endif; ?>
-    <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-    <?php $isLocked = isset($profilRow) && in_array($profilRow['status'] ?? '', ['Menunggu Persetujuan', 'Disetujui']); ?>
-    <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
-      <?php if(!$activeId || !$profilRow): ?>
-        <button id="btnProfilBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i>Tambah Profil</button>
-      <?php else: ?>
-        <button type="button" class="btn btn-hero-primary btn-standard-action" onclick="try{bukaModalDetail();}catch(e){openModal('modalDetailRisiko');}" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah Detail</button>
-        <button class="btn btn-hero-ghost btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-folder-plus"></i> Profil Baru</button>
+    <?php if(!$activeId || !$profilRow): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
+        <button id="btnProfilBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalNewProfil')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah Profil</button>
       <?php endif; ?>
     <?php endif; ?>
-    </div>
   </div>
 
   <!-- Stat cards (glassmorphism inside hero) -->
@@ -1306,14 +1333,14 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
         </colgroup>
         <thead>
           <tr>
-            <th rowspan="2" class="col-no" style="text-align:center">No</th>
-            <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
-            <th rowspan="2" class="col-risk">Risiko &amp; Unit Kerja</th>
-            <th colspan="4" style="text-align:center;background:#e2e8f0;color:#1e3a8a;font-weight:700;border-bottom:1px solid #cbd5e1">Kondisi Saat Ini</th>
-            <th rowspan="2" class="col-control">Uraian Pengendalian</th>
-            <th rowspan="2" class="col-pic-jadwal">PIC &amp; Jadwal</th>
-            <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;font-weight:700;border-bottom:1px solid #bbf7d0">Target Penurunan Risiko</th>
-            <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
+            <th rowspan="2" class="col-no" style="text-align:center;vertical-align:middle">No</th>
+            <th rowspan="2" class="col-code" style="text-align:center;vertical-align:middle">Kode</th>
+            <th rowspan="2" class="col-risk" style="text-align:center;vertical-align:middle">Risiko &amp; Unit Kerja</th>
+            <th colspan="4" style="text-align:center;vertical-align:middle;background:#e2e8f0;color:#1e3a8a;font-weight:700;border-bottom:1px solid #cbd5e1">Kondisi Saat Ini</th>
+            <th rowspan="2" class="col-control" style="text-align:center;vertical-align:middle">Uraian Pengendalian</th>
+            <th rowspan="2" class="col-pic-jadwal" style="text-align:center;vertical-align:middle">PIC &amp; Jadwal</th>
+            <th colspan="4" style="text-align:center;vertical-align:middle;background:#dcfce7;color:#166534;font-weight:700;border-bottom:1px solid #bbf7d0">Target Penurunan Risiko</th>
+            <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center;vertical-align:middle">Aksi</th><?php endif; ?>
           </tr>
           <tr>
             <th class="col-score" style="background:#edf2f7;text-align:center" title="Probabilitas">P</th>
@@ -1382,16 +1409,19 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
             </span>
           </td>
           <td style="font-size:.75rem;line-height:1.35;word-break:break-word">
-            <?= nl2br(xss($dr['rencana_penanganan']??'-')) ?>
+            <?= nl2br(xss(($dr['rencana_penanganan'] ?: ($dr['kkpr_uraian'] ?? '')) ?: '-')) ?>
           </td>
           <td style="line-height:1.35">
             <div style="font-weight:600;font-size:.74rem;color:var(--text-main);margin-bottom:3px;word-break:break-word">
               <i class="fas fa-user-tie" style="color:var(--primary);font-size:.70rem;margin-right:3px"></i><?= xss($dr['penanggungjawab']??'-') ?>
             </div>
-            <?php if(!empty($dr['jadwal_pelaksanaan'])): ?>
+            <?php 
+              $jdwl = $dr['jadwal_pelaksanaan'] ?: ($dr['kkpr_jadwal'] ?? '');
+              if(!empty($jdwl)): 
+            ?>
             <div style="font-size:.69rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:4px">
               <i class="far fa-calendar-alt" style="font-size:.67rem;margin-top:2px;opacity:.75"></i>
-              <span style="word-break:break-word"><?= xss($dr['jadwal_pelaksanaan']) ?></span>
+              <span style="word-break:break-word"><?= xss($jdwl) ?></span>
             </div>
             <?php endif; ?>
           </td>
@@ -1479,8 +1509,27 @@ elseif ($profilStatus === 'Revisi') $profilStatusClass = 'badge-danger';
             <?php foreach($risikoList as $rsk): 
               $st = $rsk['approval_status'] ?? 'approved';
               $stMark = $st === 'approved' ? '' : ' [' . ucfirst($st) . ']';
+              $uraian = trim($rsk['last_rencana'] ?: ($rsk['kkpr_rpti_uraian'] ?: ($rsk['kkpr_peng_uraian'] ?: '')));
+              $jadwal = trim($rsk['last_jadwal'] ?: ($rsk['kkpr_jadwal'] ?: ''));
+              $pj = trim($rsk['last_pj'] ?: '');
+              $tp = (int)($rsk['last_tp'] ?: ($rsk['kkpr_tp'] ?: 2));
+              $td = (int)($rsk['last_td'] ?: ($rsk['kkpr_td'] ?: 2));
+              $tb = (float)($rsk['last_tb'] ?: ($rsk['kkpr_tb'] ?: 1.00));
+              $p = (int)($rsk['probabilitas'] ?? 3);
+              $d = (int)($rsk['dampak'] ?? 3);
+              $b = getBobot($p, $d);
             ?>
-            <option value="<?= htmlspecialchars($rsk['kode_risiko']) ?>" data-nama="<?= htmlspecialchars($rsk['nama_risiko']) ?>" data-p="<?= $rsk['probabilitas'] ?>" data-d="<?= $rsk['dampak'] ?>">
+            <option value="<?= htmlspecialchars($rsk['kode_risiko']) ?>"
+              data-nama="<?= htmlspecialchars($rsk['nama_risiko']) ?>"
+              data-p="<?= $p ?>"
+              data-d="<?= $d ?>"
+              data-bobot="<?= $b ?>"
+              data-rencana="<?= htmlspecialchars($uraian) ?>"
+              data-jadwal="<?= htmlspecialchars($jadwal) ?>"
+              data-penanggungjawab="<?= htmlspecialchars($pj) ?>"
+              data-tp="<?= $tp ?>"
+              data-td="<?= $td ?>"
+              data-tb="<?= $tb ?>">
               <?= htmlspecialchars($rsk['kode_risiko']) ?> - <?= htmlspecialchars($rsk['nama_risiko']) ?><?= $stMark ?>
             </option>
             <?php endforeach; ?>
@@ -2139,18 +2188,49 @@ function updateSliderLabel(k) {
   }
 }
 
-// ── Auto-fill nama & P/D saat kode risiko dipilih ─────────────
+// ── Auto-fill semua isian saat kode risiko dipilih ─────────────
 function autoFillRisiko(sel) {
   const opt = sel.selectedOptions[0];
   if (!opt || !opt.value) return;
   const nama = opt.getAttribute('data-nama') || '';
-  const p    = opt.getAttribute('data-p')    || '';
-  const d    = opt.getAttribute('data-d')    || '';
+  const p    = opt.getAttribute('data-p')    || '3';
+  const d    = opt.getAttribute('data-d')    || '3';
+  const bobot= opt.getAttribute('data-bobot')|| '';
+  const rencana = opt.getAttribute('data-rencana') || '';
+  const jadwal  = opt.getAttribute('data-jadwal')  || '';
+  const pj      = opt.getAttribute('data-penanggungjawab') || '';
+  const tp   = opt.getAttribute('data-tp')   || '2';
+  const td   = opt.getAttribute('data-td')   || '2';
+  const tb   = opt.getAttribute('data-tb')   || '';
+
   if (nama) document.getElementById('md_nama').value = nama;
   if (p)    document.getElementById('inp_p').value   = p;
   if (d)    document.getElementById('inp_d').value   = d;
-  ['p','d'].forEach(k => updateSliderLabel(k));
+  if (bobot && document.getElementById('inp_bobot')) document.getElementById('inp_bobot').value = bobot;
+
+  // Uraian Pengendalian disamakan otomatis
+  if (rencana) document.getElementById('md_rencana').value = rencana;
+  if (pj) document.getElementById('md_penanggungjawab').value = pj;
+
+  if (jadwal) {
+    document.getElementById('md_jadwal').value = jadwal;
+    if (jadwal.includes(' s.d. ')) {
+      const parts = jadwal.split(' s.d. ');
+      document.getElementById('jadwal_start').value = parts[0];
+      document.getElementById('jadwal_end').value = parts[1];
+    } else {
+      document.getElementById('jadwal_start').value = jadwal;
+      document.getElementById('jadwal_end').value = '';
+    }
+  }
+
+  if (tp) document.getElementById('inp_tp').value = tp;
+  if (td) document.getElementById('inp_td').value = td;
+  if (tb && document.getElementById('inp_tb')) document.getElementById('inp_tb').value = tb;
+
+  ['p','d','tp','td'].forEach(k => updateSliderLabel(k));
   hitungNilai();
+  hitungTarget();
 }
 
 // ── Buka modal tambah baru ────────────────────────────────────
@@ -2193,10 +2273,10 @@ function editDetailModal(dr) {
   document.getElementById('inp_tp').value        = dr.target_p;
   document.getElementById('inp_td').value        = dr.target_d;
   if(document.getElementById('inp_tb')) document.getElementById('inp_tb').value = dr.target_bobot;
-  document.getElementById('md_rencana').value    = dr.rencana_penanganan||'';
+  document.getElementById('md_rencana').value    = dr.rencana_penanganan || dr.kkpr_uraian || '';
   // Sync slider labels
   ['p','d','tp','td'].forEach(k => updateSliderLabel(k));
-  const jdwl = dr.jadwal_pelaksanaan||'';
+  const jdwl = dr.jadwal_pelaksanaan || dr.kkpr_jadwal || '';
   document.getElementById('md_jadwal').value     = jdwl;
   if(jdwl.includes(' s.d. ')) {
     const parts = jdwl.split(' s.d. ');

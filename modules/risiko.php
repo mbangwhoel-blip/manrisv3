@@ -619,9 +619,9 @@ $draftMaster = (int)$heroStats['draft'];
         <tr>
           <th class="col-no" style="text-align:center">No</th>
           <th class="col-code" style="text-align:center">Kode</th>
-          <th class="col-risk">Nama Risiko &amp; Kegiatan</th>
-          <th class="col-owner">Pemilik Risiko</th>
-          <th class="col-dept">Pengelola Risiko</th>
+          <th class="col-risk" style="text-align:center">Nama Risiko &amp; Kegiatan</th>
+          <th class="col-owner" style="text-align:center">Pemilik Risiko</th>
+          <th class="col-dept" style="text-align:center">Pengelola Risiko</th>
           <th class="col-status" style="text-align:center">Status</th>
           <th class="col-action" style="text-align:center">Aksi</th>
         </tr>

@@ -540,7 +540,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1
 .tbl-wrap{border:1px solid #000;border-top:none}
 table{width:100%;border-collapse:collapse;font-size:7.5px}
 th,td{border:1px solid #999;padding:2px 3px;vertical-align:top}
-.th-main{background:#1e3a5f;color:#fff;font-weight:700;text-align:center;font-size:7px;white-space:nowrap}
+.th-main{background:#c8d8e8;color:#000;font-weight:700;text-align:center;font-size:7px;white-space:nowrap}
 .th-identifikasi,.th-awal{background:#c8d8e8;font-weight:700;text-align:center;font-size:7px}
 .th-group{background:#b8d4e8;font-weight:700;text-align:center;font-size:8px}
 .th-analisis{background:#fde68a;font-weight:700;text-align:center;font-size:7px}

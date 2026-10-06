@@ -270,7 +270,7 @@ if (($_GET['export'] ?? '') === 'excel' && $activeId > 0 && $kkprRow) {
             $r['nilai_risiko'] ?? '',
             $r['tingkat_risiko'] ?? '',
             $r['prioritas_risiko'] ?? '',
-            $r['rpti_uraian'] ?? '',
+            ($r['rpti_uraian'] ?: ($r['pengendalian_uraian'] ?? '')) ?? '',
             $r['rpti_jadwal'] ?? '',
             $r['pantau_p'] ?? '',
             $r['pantau_d'] ?? '',
@@ -633,9 +633,9 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
         <tr style="background:var(--surface2)">
           <th rowspan="2" style="vertical-align:middle;text-align:center;width:34px">NO</th>
           <th rowspan="2" style="vertical-align:middle;text-align:center;width:65px">KODE</th>
-          <th rowspan="2" style="vertical-align:middle;min-width:180px">RISIKO</th>
+          <th rowspan="2" style="vertical-align:middle;text-align:center;min-width:180px">RISIKO</th>
           <th colspan="4" style="text-align:center;background:#e2e8f0;color:#1e3a8a;border-bottom:1px solid #cbd5e1">PENILAIAN AWAL</th>
-          <th rowspan="2" style="vertical-align:middle;min-width:140px">URAIAN PENGENDALIAN</th>
+          <th rowspan="2" style="vertical-align:middle;text-align:center;min-width:140px">URAIAN PENGENDALIAN</th>
           <th rowspan="2" style="vertical-align:middle;text-align:center;width:110px">JADWAL</th>
           <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;border-bottom:1px solid #bbf7d0">HASIL PEMANTAUAN</th>
           <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a">SIMPULAN</th>
@@ -694,7 +694,7 @@ $kmStatusIcon = $kmBelumDipantau > 0 ? 'fa-arrow-right' : 'fa-circle-check';
             <?php $bgT = kkpmrBg($r['tingkat_risiko'] ?? 'Rendah'); $clT = kkpmrColor($r['tingkat_risiko'] ?? 'Rendah'); ?>
             <span style="background:<?= $bgT ?>;color:<?= $clT ?>;padding:3px 7px;border-radius:10px;font-weight:700;font-size:.68rem;display:inline-block;white-space:nowrap"><?= xss($r['tingkat_risiko'] ?: '-') ?></span>
           </td>
-          <td style="font-size:.72rem;line-height:1.35"><?= xss($r['rpti_uraian'] ?? '-') ?></td>
+          <td style="font-size:.72rem;line-height:1.35"><?= xss(($r['rpti_uraian'] ?: ($r['pengendalian_uraian'] ?? '')) ?: '-') ?></td>
           <td style="text-align:center;font-size:.70rem;"><?= xss($r['rpti_jadwal'] ?: '-') ?></td>
           <!-- Hasil pemantauan -->
           <td style="text-align:center;font-weight:700;color:var(--success)"><?= $r['pantau_p'] !== null ? (int)$r['pantau_p'] : '-' ?></td>

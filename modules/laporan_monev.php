@@ -609,7 +609,7 @@ if (!function_exists('laporanGetAggregat')) {
             $prefixDot  = $prefix . '.%';
             $prefixDash = $prefix . '-%';
             $sql = "
-                SELECT DISTINCT 
+                SELECT 
                     CASE 
                         WHEN '{$kolom}' = 'rencana_tindak_lanjut' THEN
                             CASE
@@ -628,13 +628,13 @@ if (!function_exists('laporanGetAggregat')) {
                 LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
                 WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
                   AND (r.kode_risiko LIKE ? OR r.kode_risiko LIKE ? OR r.kode_risiko = ? OR h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
-                ORDER BY val ASC
+                ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
             ";
             $stmt = $db->prepare($sql);
             $stmt->bind_param('isssssss', $triwulan, $tahun, $tahun, $prefixDot, $prefixDash, $prefix, $unitLike, $rawUnitLike);
         } else {
             $sql = "
-                SELECT DISTINCT 
+                SELECT 
                     CASE 
                         WHEN '{$kolom}' = 'rencana_tindak_lanjut' THEN
                             CASE
@@ -653,7 +653,7 @@ if (!function_exists('laporanGetAggregat')) {
                 LEFT JOIN monev_triwulan m ON m.id_risiko = r.id AND m.triwulan = ?
                 WHERE (TRIM(h.tahun) = ? OR h.tahun = ?)
                   AND (h.unit_pemilik_risiko LIKE ? OR h.unit_pemilik_risiko LIKE ?)
-                ORDER BY val ASC
+                ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.no_urut ASC
             ";
             $stmt = $db->prepare($sql);
             $stmt->bind_param('issss', $triwulan, $tahun, $tahun, $unitLike, $rawUnitLike);
@@ -665,7 +665,9 @@ if (!function_exists('laporanGetAggregat')) {
         while ($row = $result->fetch_row()) {
             $val = trim((string)$row[0]);
             if ($val !== '' && $val !== '-') {
-                $values[] = $val;
+                if (!in_array($val, $values, true)) {
+                    $values[] = $val;
+                }
             }
         }
         $stmt->close();
@@ -3308,11 +3310,19 @@ if ($isGenerate) {
         <h1 class="page-title" style="color:#fff">Laporan Monev Manajemen Risiko</h1>
         <p class="page-sub" style="color:rgba(255,255,255,.85)">Generate dokumen laporan monitoring dan evaluasi manajemen risiko siap cetak/PDF.</p>
       </div>
-      <div class="profil-hero-tools risiko-hero-tools-align">
-        <div style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12); padding:8px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,.2); color:#fff; font-size:.85rem;">
-          <i class="fas fa-calendar-check" style="font-size:1.1rem; color:#93c5fd;"></i>
-          <span>Periode Triwulanan &amp; Tahunan</span>
-        </div>
+      <div class="profil-hero-tools risiko-hero-tools-align" style="display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+        <button type="button" class="btn btn-hero-primary btn-standard-action" id="btnSyncFresh"
+                title="Generate langsung dari data aplikasi terbaru (abaikan draft lama)"
+                style="margin:0; padding:8px 16px; white-space:nowrap;">
+          <i class="fas fa-arrows-rotate"></i>
+          <span>Data Terbaru Aplikasi</span>
+        </button>
+        <button type="button" class="btn btn-hero-ghost btn-standard-action" id="btnResetDraftForm"
+                title="Hapus draft online tersimpan untuk periode ini agar laporan selalu bersih dari data terbaru"
+                style="margin:0; padding:8px 16px; white-space:nowrap;">
+          <i class="fas fa-trash-can"></i>
+          <span>Hapus Draft Periode</span>
+        </button>
       </div>
     </div>
 
@@ -3417,12 +3427,6 @@ if ($isGenerate) {
               <i class="fas fa-eye"></i>
               <span>Generate Laporan</span>
             </button>
-            <button type="button" class="btn btn-outline" id="btnSyncFresh"
-                    style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#0284c7; color:#0284c7;"
-                    title="Generate langsung dari data aplikasi terbaru (abaikan draft lama)">
-              <i class="fas fa-arrows-rotate"></i>
-              <span>Data Terbaru Aplikasi</span>
-            </button>
             <button type="button" class="btn btn-outline" id="btnUnduhPdf"
                     style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#dc2626; color:#dc2626;">
               <i class="fas fa-file-pdf"></i>
@@ -3437,12 +3441,6 @@ if ($isGenerate) {
                     style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:var(--accent); color:var(--accent);">
               <i class="fas fa-pen-to-square"></i>
               <span>Edit Online</span>
-            </button>
-            <button type="button" class="btn btn-outline" id="btnResetDraftForm"
-                    style="display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-color:#94a3b8; color:#64748b;"
-                    title="Hapus draft online tersimpan untuk periode ini agar laporan selalu bersih dari data terbaru">
-              <i class="fas fa-trash-can"></i>
-              <span>Hapus Draft Periode</span>
             </button>
           </div>
         </form>

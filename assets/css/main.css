@@ -585,6 +585,21 @@ textarea.form-control{resize:vertical;min-height:90px}
   /* Form label & input */
   .form-label{font-size:.75rem}
   .form-control{font-size:.82rem;padding:9px 12px}
+  /* Hero tools & action buttons responsive */
+  .profil-hero-tools, .kkpr-hero-tools, .risiko-hero-tools-align, .hero-tools-stack, .hero-tools-row {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .hero-year-select {
+    max-width: 100% !important;
+    width: auto !important;
+  }
+  .risiko-export-actions {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
 }
 @media(max-width:560px){
   .stats-grid{grid-template-columns:1fr}
@@ -607,6 +622,24 @@ textarea.form-control{resize:vertical;min-height:90px}
   .stat-card{flex-direction:row;gap:12px}
   /* Heatmap legend wrap */
   .heatmap-legend{flex-direction:column;gap:4px;align-items:flex-start}
+  /* Full width stack on ultra-mobile screens */
+  .profil-hero-tools, .kkpr-hero-tools, .risiko-hero-tools-align {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .profil-hero-tools > *, .kkpr-hero-tools > *, .risiko-hero-tools-align > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .risiko-export-actions {
+    width: 100% !important;
+    display: flex !important;
+  }
+  .risiko-export-actions > * {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
 }
 
 /* ============================================================
@@ -940,17 +973,36 @@ textarea.form-control{resize:vertical;min-height:90px}
 /* ── Data Table ──────────────────────────────────────────────── */
 .table-responsive {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   margin-bottom: 16px;
+  position: relative;
+}
+.table-responsive::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.table-responsive::-webkit-scrollbar-track {
+  background: var(--surface2);
+  border-radius: 4px;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 4px;
+}
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
 }
 .data-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 .data-table th {
   background: var(--surface2);
-  padding: 12px 16px; text-align: left;
+  padding: 12px 16px; text-align: center;
   font-weight: 700; color: var(--text-muted);
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
+  vertical-align: middle;
 }
 .data-table td {
   padding: 12px 16px;
@@ -1030,6 +1082,7 @@ td:has(.user-act-group){white-space:nowrap;vertical-align:middle;}
   line-height: 1.25;
   white-space: normal;
   vertical-align: middle;
+  text-align: center;
 }
 .ikk-data-table td, .mitigasi-data-table td, .monev-data-table td {
   padding: 8px 6px;
@@ -1437,6 +1490,7 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
   line-height: 1.25;
   white-space: normal;
   vertical-align: middle;
+  text-align: center;
 }
 .profil-detail-table td {
   padding: 8px 6px;
@@ -1490,6 +1544,7 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
   line-height: 1.25;
   white-space: normal;
   vertical-align: middle;
+  text-align: center;
 }
 .kkpr-data-table td {
   padding: 8px 6px;
@@ -1518,6 +1573,7 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
   line-height: 1.25;
   white-space: normal;
   vertical-align: middle;
+  text-align: center;
 }
 .kkpmr-data-table td {
   padding: 8px 6px;
@@ -1530,6 +1586,23 @@ body.dark-mode .dashboard-insight{background:rgba(120,53,15,.18);border-color:rg
 }
 .kkpmr-data-table tbody tr:hover {
   background: rgba(219, 234, 254, .35);
+}
+
+/* ── Judul Tabel Selalu Rata Tengah ── */
+table thead th,
+table th,
+.data-table thead th,
+.data-table th,
+.profil-detail-table thead th,
+.kkpr-data-table thead th,
+.kkpmr-data-table thead th,
+.risiko-master-table thead th,
+.risiko-data-table thead th,
+.ikk-data-table thead th,
+.mitigasi-data-table thead th,
+.monev-data-table thead th {
+  text-align: center !important;
+  vertical-align: middle !important;
 }
 
 /* ── Risiko Master Data Table: Seragam & Terstruktur ── */

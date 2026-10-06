@@ -65,7 +65,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:1
 .tbl-wrap{border:1px solid #000;border-top:none}
 table{width:100%;border-collapse:collapse;font-size:7.5px}
 th,td{border:1px solid #999;padding:2px 3px;vertical-align:top}
-.th-main{background:#1e3a5f;color:#fff;font-weight:700;text-align:center;font-size:7px;white-space:nowrap}
+.th-main{background:#c8d8e8;color:#000;font-weight:700;text-align:center;font-size:7px;white-space:nowrap}
 .th-identifikasi{background:#c8d8e8;font-weight:700;text-align:center;font-size:7px}
 .th-analisis{background:#fde68a;font-weight:700;text-align:center;font-size:7px}
 .th-evaluasi{background:#fca5a5;font-weight:700;text-align:center;font-size:7px}
@@ -213,7 +213,7 @@ th,td{border:1px solid #999;padding:2px 3px;vertical-align:top}
     <?php else: ?>
     <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
     <?php endif; ?>
-    <td><?= nl2br(xss($r['pengendalian_uraian']??'')) ?></td>
+    <td><?= nl2br(xss(($r['pengendalian_uraian'] ?: $r['rpti_uraian']) ?? '')) ?></td>
     <td style="text-align:center;font-weight:700"><?= ($r['pengendalian_efektivitas'] === 'E') ? 'V' : '' ?></td>
     <td style="text-align:center;font-size:7px"><?= ($r['pengendalian_efektivitas'] === 'TE' || $r['pengendalian_efektivitas'] === 'BE') ? ($r['pengendalian_jenis'] ? xss($r['pengendalian_jenis']) : 'V') : '' ?></td>
     <td style="text-align:center;font-weight:700"><?= $r['probabilitas'] ?></td>
@@ -232,7 +232,7 @@ th,td{border:1px solid #999;padding:2px 3px;vertical-align:top}
       if (str_contains($pp,'Menerima')) echo 'background:#ffff00;color:#000;';
       elseif (str_contains($pp,'Mitigasi')) echo 'background:#ef4444;color:#fff;';
     ?>"><?= xss($pp ?: '-') ?></td>
-    <td style="font-size:7px"><?= nl2br(xss($r['rpti_uraian']??'')) ?></td>
+    <td style="font-size:7px"><?= nl2br(xss(($r['rpti_uraian'] ?: $r['pengendalian_uraian']) ?? '')) ?></td>
     <td style="font-size:7px"><?= xss($r['rpti_jadwal']??'') ?></td>
     <td style="text-align:center;font-weight:700"><?= $r['target_p'] ?></td>
     <td style="text-align:center;font-weight:700"><?= $r['target_d'] ?></td>

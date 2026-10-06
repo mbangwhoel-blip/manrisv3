@@ -6,6 +6,13 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
+// ── Kompresi Output GZIP (Otomatis kompresi HTML untuk performa online maksimal) ──
+if (!ob_get_level() && !ini_get('zlib.output_compression') && PHP_SAPI !== 'cli') {
+    if (extension_loaded('zlib') && !headers_sent()) {
+        ob_start('ob_gzhandler');
+    }
+}
+
 // ── Pembersih OPcache self-service (Admin only) ──────────────
 if (isset($_GET['clear_cache']) && isLoggedIn() && hasRole('Admin') && function_exists('opcache_reset')) {
     opcache_reset();

@@ -21,7 +21,10 @@ $s->execute();
 $p = $s->get_result()->fetch_assoc(); $s->close();
 if (!$p) { http_response_code(404); echo 'Profil tidak ditemukan'; exit; }
 
-$s2 = $db->prepare("SELECT * FROM profil_risiko_detail WHERE id_profil=? ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, no_urut, id");
+$s2 = $db->prepare("SELECT d.*,
+    (SELECT COALESCE(NULLIF(r.rpti_uraian, ''), r.pengendalian_uraian) FROM kkpr_risiko r WHERE r.kode_risiko = d.kode_risiko AND (r.rpti_uraian != '' OR r.pengendalian_uraian != '') ORDER BY r.id DESC LIMIT 1) AS kkpr_uraian,
+    (SELECT r.rpti_jadwal FROM kkpr_risiko r WHERE r.kode_risiko = d.kode_risiko AND r.rpti_jadwal != '' ORDER BY r.id DESC LIMIT 1) AS kkpr_jadwal
+FROM profil_risiko_detail d WHERE d.id_profil=? ORDER BY SUBSTRING_INDEX(d.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(d.kode_risiko, '.', -1) AS UNSIGNED) ASC, d.no_urut, d.id");
 $s2->bind_param('i',$id); $s2->execute();
 $details = $s2->get_result()->fetch_all(MYSQLI_ASSOC); $s2->close();
 
@@ -242,8 +245,8 @@ foreach ($details as $d) {
         </span>
       </td>
       <td class="td-center" style="font-weight:700"><?= $dr['prioritas_risiko'] ?></td>
-      <td style="font-size:8px"><?= nl2br(xss($dr['rencana_penanganan']??'')) ?></td>
-      <td style="font-size:8px"><?= xss($dr['jadwal_pelaksanaan']??'') ?></td>
+      <td style="font-size:8px"><?= nl2br(xss(($dr['rencana_penanganan'] ?: ($dr['kkpr_uraian'] ?? '')) ?: '')) ?></td>
+      <td style="font-size:8px"><?= xss(($dr['jadwal_pelaksanaan'] ?: ($dr['kkpr_jadwal'] ?? '')) ?: '') ?></td>
       <td style="font-size:8px"><?= xss($dr['penanggungjawab']??'') ?></td>
       <td class="td-center" style="font-weight:700"><?= $dr['target_p'] ?></td>
       <td class="td-center" style="font-weight:700"><?= $dr['target_d'] ?></td>

@@ -363,6 +363,14 @@ if (sidebarToggleBtn) {
   });
 }
 
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+if (sidebarOverlay) {
+  sidebarOverlay.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  });
+}
+
 // ── Dropdown User ─────────────────────────────────────────────
 const userDropdownBtn = document.getElementById('userDropdownBtn');
 if (userDropdownBtn) {

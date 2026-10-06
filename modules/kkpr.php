@@ -129,6 +129,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tNilai  = round($tp * $td * $tb);
         $tTingkat = getLevelRisiko((int)$tNilai);
 
+        $pengUraian = trim($_POST['pengendalian_uraian'] ?? '');
+        $rptiUraian = trim($_POST['rpti_uraian'] ?? '');
+        if ($pengUraian === '' && $rptiUraian !== '') {
+            $pengUraian = $rptiUraian;
+        } elseif ($rptiUraian === '' && $pengUraian !== '') {
+            $rptiUraian = $pengUraian;
+        }
+
         $f = [
             'no_urut'               => (int)($_POST['no_urut'] ?? 1),
             'nama_risiko'           => trim($_POST['nama_risiko'] ?? ''),
@@ -137,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'sumber'                => normalizeSumberRisiko($_POST['sumber'] ?? 'Eksternal'),
             'c_uc'                  => $_POST['c_uc'] ?? 'UC',
             'dampak_uraian'         => trim($_POST['dampak_uraian'] ?? ''),
-            'pengendalian_uraian'   => trim($_POST['pengendalian_uraian'] ?? ''),
+            'pengendalian_uraian'   => $pengUraian,
             'pengendalian_jenis'    => $_POST['pengendalian_jenis'] ?? '',
             'pengendalian_efektivitas' => $_POST['pengendalian_efektivitas'] ?? '',
             'probabilitas'          => $p,
@@ -149,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'pilihan_penanganan'    => $nilai <= 9 ? 'Menerima risiko' : 'Mitigasi Risiko',
             'selera_risiko'         => $nilai <= 9 ? 'Dalam batas selera risiko' : 'Diatas batas selera risiko',
             'evaluasi_warna'        => trim($_POST['evaluasi_warna'] ?? ''),
-            'rpti_uraian'           => trim($_POST['rpti_uraian'] ?? ''),
+            'rpti_uraian'           => $rptiUraian,
             'rpti_jadwal'           => trim($_POST['rpti_jadwal'] ?? ''),
             'target_p'              => $tp,
             'target_d'              => $td,
@@ -190,6 +198,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         }
         $s->execute(); $s->close();
+
+        // Otomatis sinkronkan uraian & jadwal ke profil_risiko_detail jika di profil masih kosong
+        if ($f['kode_risiko'] !== '' && $f['rpti_uraian'] !== '') {
+            $upProfil = $db->prepare("UPDATE profil_risiko_detail SET rencana_penanganan=? WHERE kode_risiko=? AND (rencana_penanganan IS NULL OR rencana_penanganan='')");
+            if ($upProfil) {
+                $upProfil->bind_param('ss', $f['rpti_uraian'], $f['kode_risiko']);
+                $upProfil->execute();
+                $upProfil->close();
+            }
+        }
+        if ($f['kode_risiko'] !== '' && $f['rpti_jadwal'] !== '') {
+            $upProfilJ = $db->prepare("UPDATE profil_risiko_detail SET jadwal_pelaksanaan=? WHERE kode_risiko=? AND (jadwal_pelaksanaan IS NULL OR jadwal_pelaksanaan='')");
+            if ($upProfilJ) {
+                $upProfilJ->bind_param('ss', $f['rpti_jadwal'], $f['kode_risiko']);
+                $upProfilJ->execute();
+                $upProfilJ->close();
+            }
+        }
+
         $sTh = $db->prepare('SELECT tahun FROM kkpr_header WHERE id=?');
         $sTh->bind_param('i', $idKkpr);
         $sTh->execute();
@@ -294,13 +321,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sebab = $master['penyebab'] ?? '';
             $dampakU = $master['dampak'] ?? '';
             $sumber = normalizeSumberRisiko($master['sumber'] ?? ''); $cuc = 'UC';
-            $pengU = ''; $pengJ = ''; $pengE = '';
+            $rptiU = trim($r['rencana_penanganan'] ?? '');
+            $pengU = $rptiU; // Otomatis samakan uraian pengendalian dengan profil risiko
+            $pengJ = ''; $pengE = '';
             $prio = (int)($r['prioritas_risiko'] ?? 0);
             $pilPen = '';
             $seleraImp = $nilai <= 9 ? 'Dalam batas selera risiko' : 'Diatas batas selera risiko';
             $evalW = '';
-            $rptiU = $r['rencana_penanganan'] ?? '';
-            $rptiJ = $r['jadwal_pelaksanaan'] ?? '';
+            $rptiJ = trim($r['jadwal_pelaksanaan'] ?? '');
             $stmt->bind_param('iisssssssssiiddsisssssiidds',
                 $idKkpr,$no,$nama,$kode,$sebab,$sumber,$cuc,$dampakU,$pengU,$pengJ,$pengE,
                 $p,$d,$b,$nilai,$tingkat,$prio,$pilPen,$seleraImp,$evalW,$rptiU,$rptiJ,
@@ -413,8 +441,23 @@ if ($fTahun !== '') {
 $kkprList  = $db->query("SELECT h.id,h.tahun,h.unit_pemilik_risiko,h.nama_pemilik_risiko, u.nama AS nama_creator, (SELECT COUNT(*) FROM kkpr_risiko r WHERE r.id_kkpr = h.id) AS jml_detail FROM kkpr_header h LEFT JOIN users u ON h.created_by = u.id $kkpr_cond ORDER BY h.tahun DESC, h.id DESC")->fetch_all(MYSQLI_ASSOC) ?: [];
 
 // Master risiko untuk dropdown auto-fill (semua yang aktif)
-$risikoCond = (function_exists('canAccessAllRecords') && canAccessAllRecords()) || hasRole('Admin', 'Pimpinan') ? "" : " AND id_user_input = " . (int)$_SESSION['user_id'];
-$risikoMaster = $db->query("SELECT kode_risiko, nama_risiko, deskripsi, penyebab, dampak, sumber FROM risiko WHERE deleted_at IS NULL AND (approval_status='approved' OR approval_status IS NULL) $risikoCond ORDER BY SUBSTRING_INDEX(kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(kode_risiko, '.', -1) AS UNSIGNED) ASC, kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
+$risikoCond = (function_exists('canAccessAllRecords') && canAccessAllRecords()) || hasRole('Admin', 'Pimpinan') ? "" : " AND r.id_user_input = " . (int)$_SESSION['user_id'];
+$risikoMaster = $db->query("SELECT r.kode_risiko, r.nama_risiko, r.deskripsi, r.penyebab, r.dampak, r.sumber, r.probabilitas, r.dampak_level,
+    (SELECT d.rencana_penanganan FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.rencana_penanganan != '' ORDER BY d.id DESC LIMIT 1) AS profil_rencana,
+    (SELECT d.jadwal_pelaksanaan FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.jadwal_pelaksanaan != '' ORDER BY d.id DESC LIMIT 1) AS profil_jadwal,
+    (SELECT d.prioritas_risiko FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.prioritas_risiko > 0 ORDER BY d.id DESC LIMIT 1) AS profil_prio,
+    (SELECT d.probabilitas FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.probabilitas > 0 ORDER BY d.id DESC LIMIT 1) AS profil_p,
+    (SELECT d.dampak FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.dampak > 0 ORDER BY d.id DESC LIMIT 1) AS profil_d,
+    (SELECT d.bobot FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.bobot > 0 ORDER BY d.id DESC LIMIT 1) AS profil_bobot,
+    (SELECT d.target_p FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_p > 0 ORDER BY d.id DESC LIMIT 1) AS profil_tp,
+    (SELECT d.target_d FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_d > 0 ORDER BY d.id DESC LIMIT 1) AS profil_td,
+    (SELECT d.target_bobot FROM profil_risiko_detail d WHERE d.kode_risiko = r.kode_risiko AND d.target_bobot > 0 ORDER BY d.id DESC LIMIT 1) AS profil_tb,
+    (SELECT k.pengendalian_uraian FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.pengendalian_uraian != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_peng_uraian,
+    (SELECT k.rpti_uraian FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.rpti_uraian != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_rpti_uraian,
+    (SELECT k.rpti_jadwal FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.rpti_jadwal != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_jadwal,
+    (SELECT k.prioritas_risiko FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.prioritas_risiko > 0 ORDER BY k.id DESC LIMIT 1) AS kkpr_prio,
+    (SELECT k.c_uc FROM kkpr_risiko k WHERE k.kode_risiko = r.kode_risiko AND k.c_uc != '' ORDER BY k.id DESC LIMIT 1) AS kkpr_cuc
+FROM risiko r WHERE r.deleted_at IS NULL AND (r.approval_status='approved' OR r.approval_status IS NULL) $risikoCond ORDER BY SUBSTRING_INDEX(r.kode_risiko, '.', 1) ASC, CAST(SUBSTRING_INDEX(r.kode_risiko, '.', -1) AS UNSIGNED) ASC, r.kode_risiko ASC")->fetch_all(MYSQLI_ASSOC) ?: [];
 
 // ── Export Excel ──────────────────────────────────────────────
 if (($_GET['export'] ?? '') === 'excel' && $activeId > 0 && $kkprRow) {
@@ -437,7 +480,7 @@ if (($_GET['export'] ?? '') === 'excel' && $activeId > 0 && $kkprRow) {
             normalizeSumberRisiko($r['sumber'] ?? ''),
             $r['c_uc'] ?? '',
             $r['dampak_uraian'] ?? '',
-            $r['pengendalian_uraian'] ?? '',
+            ($r['pengendalian_uraian'] ?: $r['rpti_uraian']) ?? '',
             $r['pengendalian_jenis'] ?? '',
             $r['pengendalian_efektivitas'] ?? '',
             $r['probabilitas'] ?? '',
@@ -448,7 +491,7 @@ if (($_GET['export'] ?? '') === 'excel' && $activeId > 0 && $kkprRow) {
             $r['prioritas_risiko'] ?? '',
             $r['selera_risiko'] ?? '',
             $r['pilihan_penanganan'] ?? '',
-            $r['rpti_uraian'] ?? '',
+            ($r['rpti_uraian'] ?: $r['pengendalian_uraian']) ?? '',
             $r['rpti_jadwal'] ?? '',
             $r['target_p'] ?? '',
             $r['target_d'] ?? '',
@@ -513,37 +556,31 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
       <?php endif; ?>
     </div>
   </div>
-  <div class="profil-hero-tools risiko-hero-tools-align">
-  <select class="form-control hero-year-select" style="max-width:130px;width:auto;text-align:center;text-align-last:center;" onchange="if(this.value) window.location.href='<?= APP_URL ?>/?page=kkpr&tahun='+encodeURIComponent(this.value)" aria-label="Pilih tahun">
-    <?php foreach($tahunList as $y): ?>
-    <option value="<?= xss($y) ?>" <?= (string)$y === (string)$activeTahun ? 'selected' : '' ?> style="text-align:center;"><?= xss($y) ?></option>
-    <?php endforeach; ?>
-  </select>
-  <?php if($activeId && $kkprRow): ?>
-  <div class="risiko-export-actions" style="margin-top:0">
-    <a href="<?= APP_URL ?>/?page=kkpr&id=<?= $activeId ?>&export=excel" class="btn btn-hero-ghost"><i class="fas fa-file-excel"></i> Excel</a>
-    <select class="form-control hero-year-select" style="width: 155px !important; max-width: 155px !important; padding: 0 24px 0 14px !important; text-align-last: center !important;" onchange="if(this.value){window.open('<?= APP_URL ?>/?page=kkpr&id=<?= $activeId ?>&export=pdf&periode='+encodeURIComponent(this.value),'_blank');this.selectedIndex=0;}" aria-label="Cetak Laporan" title="Cetak Laporan per triwulan / tahunan / bulanan">
-        <option value="">&#128196; Cetak / PDF</option>
-      <option value="bulan_ini" style="text-align: left;">Laporan Bulan Ini</option>
-      <option value="tw1" style="text-align: left;">Laporan Triwulan I</option>
-      <option value="tw2" style="text-align: left;">Laporan Triwulan II</option>
-      <option value="tw3" style="text-align: left;">Laporan Triwulan III</option>
-      <option value="tw4" style="text-align: left;">Laporan Triwulan IV</option>
-      <option value="tahunan" style="text-align: left;">Laporan Tahunan</option>
+  <div class="profil-hero-tools risiko-hero-tools-align" style="display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+    <select class="form-control hero-year-select" style="max-width:130px;width:auto;text-align:center;text-align-last:center;" onchange="if(this.value) window.location.href='<?= APP_URL ?>/?page=kkpr&tahun='+encodeURIComponent(this.value)" aria-label="Pilih tahun">
+      <?php foreach($tahunList as $y): ?>
+      <option value="<?= xss($y) ?>" <?= (string)$y === (string)$activeTahun ? 'selected' : '' ?> style="text-align:center;"><?= xss($y) ?></option>
+      <?php endforeach; ?>
     </select>
-  </div>
-  <?php endif; ?>
-  <div class="risiko-hero-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-    <?php $isLockedKkpr = isset($kkprRow) && in_array($kkprRow['status_kkpr'] ?? '', ['Menunggu Persetujuan', 'Disetujui']); ?>
-    <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
-      <?php if(!$activeId || !$kkprRow): ?>
+    <?php if($activeId && $kkprRow): ?>
+    <div class="risiko-export-actions" style="margin-top:0; display:flex; align-items:center; gap:8px;">
+      <a href="<?= APP_URL ?>/?page=kkpr&id=<?= $activeId ?>&export=excel" class="btn btn-hero-ghost"><i class="fas fa-file-excel"></i> Excel</a>
+      <select class="form-control hero-year-select" style="width: 155px !important; max-width: 155px !important; padding: 0 24px 0 14px !important; text-align-last: center !important;" onchange="if(this.value){window.open('<?= APP_URL ?>/?page=kkpr&id=<?= $activeId ?>&export=pdf&periode='+encodeURIComponent(this.value),'_blank');this.selectedIndex=0;}" aria-label="Cetak Laporan" title="Cetak Laporan per triwulan / tahunan / bulanan">
+          <option value="">&#128196; Cetak / PDF</option>
+        <option value="bulan_ini" style="text-align: left;">Laporan Bulan Ini</option>
+        <option value="tw1" style="text-align: left;">Laporan Triwulan I</option>
+        <option value="tw2" style="text-align: left;">Laporan Triwulan II</option>
+        <option value="tw3" style="text-align: left;">Laporan Triwulan III</option>
+        <option value="tw4" style="text-align: left;">Laporan Triwulan IV</option>
+        <option value="tahunan" style="text-align: left;">Laporan Tahunan</option>
+      </select>
+    </div>
+    <?php endif; ?>
+    <?php if(!$activeId || !$kkprRow): ?>
+      <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?>
         <button id="btnKkprBaruHeader" class="btn btn-hero-primary btn-standard-action" onclick="openModal('modalKkprBaru')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus"></i> Tambah KKPR</button>
-      <?php else: ?>
-        <button type="button" class="btn btn-hero-primary btn-standard-action" onclick="bukaModalKkprRisiko()" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-plus-circle"></i> Tambah Risiko</button>
-        <button class="btn btn-hero-ghost btn-standard-action" onclick="openModal('modalKkprBaru')" style="margin:0;padding:8px 14px;white-space:nowrap;"><i class="fas fa-folder-plus"></i> KKPR Baru</button>
       <?php endif; ?>
     <?php endif; ?>
-  </div>
   </div>
 
   <!-- Stat cards (glassmorphism inside hero) -->
@@ -855,35 +892,35 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
       </colgroup>
       <thead>
         <tr>
-          <th rowspan="2" class="col-no" style="text-align:center">No</th>
-          <th rowspan="2" class="col-code" style="text-align:center">Kode</th>
-          <th rowspan="2" class="col-risk" style="min-width:140px">Risiko</th>
-          <th colspan="4" style="text-align:center;background:#f1f5f9;color:#334155;border-bottom:1px solid #cbd5e1">IDENTIFIKASI RISIKO</th>
-          <th colspan="6" style="text-align:center;background:#e2e8f0;color:#1e3a8a;border-bottom:1px solid #cbd5e1">ANALISIS RISIKO</th>
-          <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a">EVALUASI RISIKO</th>
-          <th colspan="2" style="text-align:center;background:#e0e7ff;color:#3730a3;border-bottom:1px solid #c7d2fe">RPR</th>
-          <th colspan="4" style="text-align:center;background:#dcfce7;color:#166534;border-bottom:1px solid #bbf7d0">TARGET</th>
-          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center">Aksi</th><?php endif; ?>
+          <th rowspan="2" class="col-no" style="text-align:center;vertical-align:middle">No</th>
+          <th rowspan="2" class="col-code" style="text-align:center;vertical-align:middle">Kode</th>
+          <th rowspan="2" class="col-risk" style="min-width:140px;text-align:center;vertical-align:middle">Risiko</th>
+          <th colspan="4" style="text-align:center;vertical-align:middle;background:#f1f5f9;color:#334155;border-bottom:1px solid #cbd5e1">IDENTIFIKASI RISIKO</th>
+          <th colspan="6" style="text-align:center;vertical-align:middle;background:#e2e8f0;color:#1e3a8a;border-bottom:1px solid #cbd5e1">ANALISIS RISIKO</th>
+          <th colspan="2" style="text-align:center;vertical-align:middle;background:#fef3c7;color:#92400e;border-bottom:1px solid #fde68a">EVALUASI RISIKO</th>
+          <th colspan="2" style="text-align:center;vertical-align:middle;background:#e0e7ff;color:#3730a3;border-bottom:1px solid #c7d2fe">RPR</th>
+          <th colspan="4" style="text-align:center;vertical-align:middle;background:#dcfce7;color:#166534;border-bottom:1px solid #bbf7d0">TARGET</th>
+          <?php if(hasRole('Admin','Risk Manager','Koordinator')): ?><th rowspan="2" class="col-action" style="text-align:center;vertical-align:middle">Aksi</th><?php endif; ?>
         </tr>
         <tr>
-          <th style="min-width:120px">Sebab</th>
-          <th style="width:75px;text-align:center">Sumber</th>
-          <th style="width:48px;text-align:center">C/UC</th>
-          <th style="min-width:120px">Dampak</th>
-          <th style="min-width:120px">Uraian Pengendalian</th>
-          <th style="width:75px;text-align:center">Efektivitas</th>
-          <th style="width:32px;text-align:center" title="Probabilitas">P</th>
-          <th style="width:32px;text-align:center" title="Dampak">D</th>
-          <th style="width:52px;text-align:center" title="Nilai &amp; Bobot">Nilai<br><span style="font-size:.6rem;font-weight:normal;color:#475569">(Bobot)</span></th>
-          <th style="width:80px;text-align:center">Tingkat</th>
-          <th style="width:85px;text-align:center">Selera Risiko</th>
-          <th style="width:95px;text-align:center">Pilihan Penanganan</th>
-          <th style="min-width:120px">Uraian</th>
-          <th style="width:110px">Jadwal</th>
-          <th style="width:32px;text-align:center" title="Target Probabilitas">P&darr;</th>
-          <th style="width:32px;text-align:center" title="Target Dampak">D&darr;</th>
-          <th style="width:52px;text-align:center" title="Target Nilai &amp; Bobot">Nilai&darr;<br><span style="font-size:.6rem;font-weight:normal;color:#166534">(Bobot)</span></th>
-          <th style="width:80px;text-align:center">Tingkat&darr;</th>
+          <th style="min-width:120px;text-align:center;vertical-align:middle">Sebab</th>
+          <th style="width:75px;text-align:center;vertical-align:middle">Sumber</th>
+          <th style="width:48px;text-align:center;vertical-align:middle">C/UC</th>
+          <th style="min-width:120px;text-align:center;vertical-align:middle">Dampak</th>
+          <th style="min-width:120px;text-align:center;vertical-align:middle">Uraian Pengendalian</th>
+          <th style="width:75px;text-align:center;vertical-align:middle">Efektivitas</th>
+          <th style="width:32px;text-align:center;vertical-align:middle" title="Probabilitas">P</th>
+          <th style="width:32px;text-align:center;vertical-align:middle" title="Dampak">D</th>
+          <th style="width:52px;text-align:center;vertical-align:middle" title="Nilai &amp; Bobot">Nilai<br><span style="font-size:.6rem;font-weight:normal;color:#475569">(Bobot)</span></th>
+          <th style="width:80px;text-align:center;vertical-align:middle">Tingkat</th>
+          <th style="width:85px;text-align:center;vertical-align:middle">Selera Risiko</th>
+          <th style="width:95px;text-align:center;vertical-align:middle">Pilihan Penanganan</th>
+          <th style="min-width:120px;text-align:center;vertical-align:middle">Uraian</th>
+          <th style="width:110px;text-align:center;vertical-align:middle">Jadwal</th>
+          <th style="width:32px;text-align:center;vertical-align:middle" title="Target Probabilitas">P&darr;</th>
+          <th style="width:32px;text-align:center;vertical-align:middle" title="Target Dampak">D&darr;</th>
+          <th style="width:52px;text-align:center;vertical-align:middle" title="Target Nilai &amp; Bobot">Nilai&darr;<br><span style="font-size:.6rem;font-weight:normal;color:#166534">(Bobot)</span></th>
+          <th style="width:80px;text-align:center;vertical-align:middle">Tingkat&darr;</th>
         </tr>
       </thead>
       <tbody>
@@ -905,7 +942,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
         <td style="text-align:center"><span class="badge badge-secondary" style="font-size:.68rem;padding:2px 6px"><?= xss(normalizeSumberRisiko($r['sumber'] ?? '')) ?></span></td>
         <td style="text-align:center"><span class="badge badge-info" style="font-size:.68rem;padding:2px 6px"><?= xss($r['c_uc']??'-') ?></span></td>
         <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['dampak_uraian']??'') ?: '-' ?></td>
-        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['pengendalian_uraian']??'') ?: '-' ?></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss(($r['pengendalian_uraian'] ?: $r['rpti_uraian']) ?? '') ?: '-' ?></td>
         <td style="text-align:center">
           <?php if(($r['pengendalian_efektivitas']??'')==='E'): ?>
             <span class="badge badge-success" style="font-size:.68rem;padding:2px 6px">Efektif</span>
@@ -934,7 +971,7 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
           if (str_contains($pp,'Menerima')) echo 'background:#FFFF00;color:#000000;font-weight:700;padding:2px 4px;border-radius:4px;';
           elseif (str_contains($pp,'Mitigasi')) echo 'background:#FF0000;color:#ffffff;font-weight:700;padding:2px 4px;border-radius:4px;';
         ?>"><?= xss($pp?:'-') ?></td>
-        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss($r['rpti_uraian']??'') ?: '-' ?></td>
+        <td style="font-size:.72rem;line-height:1.35;min-width:120px"><?= xss(($r['rpti_uraian'] ?: $r['pengendalian_uraian']) ?? '') ?: '-' ?></td>
         <td style="font-size:.70rem;line-height:1.3;"><?= xss($r['rpti_jadwal']??'') ?: '-' ?></td>
         <td style="text-align:center;font-weight:700"><?= $r['target_p'] ?></td>
         <td style="text-align:center;font-weight:700"><?= $r['target_d'] ?></td>
@@ -1014,8 +1051,34 @@ elseif ($kkprStatus === 'Revisi') $kkprStatusClass = 'badge-danger';
             <div class="form-group" style="margin:0"><label class="form-label">Kode Risiko <span class="required">*</span></label>
               <select name="kode_risiko" id="kkpr_kode" class="form-control" onchange="kkprAutoFill(this)" required>
                 <option value="">-- Pilih Risiko dari Identifikasi --</option>
-                <?php foreach($risikoMaster as $rm): ?>
-                <option value="<?= htmlspecialchars($rm['kode_risiko']) ?>" data-nama="<?= htmlspecialchars($rm['nama_risiko']) ?>" data-sebab="<?= htmlspecialchars($rm['penyebab']??'') ?>" data-dampak="<?= htmlspecialchars($rm['dampak']??'') ?>" data-sumber="<?= htmlspecialchars(normalizeSumberRisiko($rm['sumber'] ?? '')) ?>">
+                <?php foreach($risikoMaster as $rm): 
+                  $uraian = trim($rm['kkpr_rpti_uraian'] ?: ($rm['kkpr_peng_uraian'] ?: ($rm['profil_rencana'] ?: '')));
+                  $jadwal = trim($rm['kkpr_jadwal'] ?: ($rm['profil_jadwal'] ?: ''));
+                  $p = (int)($rm['profil_p'] ?: ($rm['probabilitas'] ?: 3));
+                  $d = (int)($rm['profil_d'] ?: ($rm['dampak_level'] ?: 3));
+                  $bobot = (float)($rm['profil_bobot'] ?: getBobot($p, $d));
+                  $tp = (int)($rm['profil_tp'] ?: 2);
+                  $td = (int)($rm['profil_td'] ?: 2);
+                  $tb = (float)($rm['profil_tb'] ?: getBobot($tp, $td));
+                  $prio = (int)($rm['profil_prio'] ?: ($rm['kkpr_prio'] ?: 1));
+                  $cuc = $rm['kkpr_cuc'] ?: 'UC';
+                  $sumber = normalizeSumberRisiko($rm['sumber'] ?? 'Eksternal');
+                ?>
+                <option value="<?= htmlspecialchars($rm['kode_risiko']) ?>"
+                  data-nama="<?= htmlspecialchars($rm['nama_risiko']) ?>"
+                  data-sebab="<?= htmlspecialchars($rm['penyebab']??'') ?>"
+                  data-dampak="<?= htmlspecialchars($rm['dampak']??'') ?>"
+                  data-sumber="<?= htmlspecialchars($sumber) ?>"
+                  data-cuc="<?= htmlspecialchars($cuc) ?>"
+                  data-uraian="<?= htmlspecialchars($uraian) ?>"
+                  data-jadwal="<?= htmlspecialchars($jadwal) ?>"
+                  data-p="<?= $p ?>"
+                  data-d="<?= $d ?>"
+                  data-bobot="<?= $bobot ?>"
+                  data-prio="<?= $prio ?>"
+                  data-tp="<?= $tp ?>"
+                  data-td="<?= $td ?>"
+                  data-tb="<?= $tb ?>">
                   <?= htmlspecialchars($rm['kode_risiko']) ?> - <?= htmlspecialchars($rm['nama_risiko']) ?>
                 </option>
                 <?php endforeach; ?>
@@ -1528,15 +1591,46 @@ kkprHitung(); kkprHitungTarget();
 // Init slider labels
 ['p','d','tp','td'].forEach(k => kkprUpdateSlider(k));
 
-// ── Auto-fill dari master saat pilih kode risiko ──────────────
+// ── Auto-fill semua isian dari master saat pilih kode risiko ──────────────
 function kkprAutoFill(sel){
   if(!sel.value) return;
   const opt=sel.options[sel.selectedIndex];
   if(!opt) return;
-  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v||'';};
+  const set=(id,v)=>{const el=document.getElementById(id); if(el && v !== null && v !== undefined) el.value=v;};
   set('kkpr_nama', opt.getAttribute('data-nama'));
   set('kkpr_sebab', opt.getAttribute('data-sebab'));
   set('kkpr_dampak', opt.getAttribute('data-dampak'));
+  if (opt.getAttribute('data-sumber')) set('kkpr_sumber', opt.getAttribute('data-sumber'));
+  if (opt.getAttribute('data-cuc')) set('kkpr_cuc', opt.getAttribute('data-cuc'));
+
+  const uraian = opt.getAttribute('data-uraian') || '';
+  if (uraian) {
+    set('kkpr_peng_uraian', uraian);
+    set('kkpr_rpti', uraian);
+  }
+
+  const jadwal = opt.getAttribute('data-jadwal') || '';
+  if (jadwal) set('kkpr_jadwal', jadwal);
+
+  const p = opt.getAttribute('data-p');
+  const d = opt.getAttribute('data-d');
+  const b = opt.getAttribute('data-bobot');
+  const prio = opt.getAttribute('data-prio');
+  if (p) set('kkpr_p', p);
+  if (d) set('kkpr_d', d);
+  if (b) set('kkpr_b', b);
+  if (prio) set('kkpr_prio', prio);
+
+  const tp = opt.getAttribute('data-tp');
+  const td = opt.getAttribute('data-td');
+  const tb = opt.getAttribute('data-tb');
+  if (tp) set('kkpr_tp', tp);
+  if (td) set('kkpr_td', td);
+  if (tb) set('kkpr_tb', tb);
+
+  ['p','d','tp','td'].forEach(k => kkprUpdateSlider(k));
+  kkprHitung();
+  kkprHitungTarget();
 }
 
 // ── Buka modal tambah ─────────────────────────────────────────
@@ -1572,19 +1666,22 @@ function editKkprRisiko(r){
   set('kkpr_dampak', r.dampak_uraian);
   set('kkpr_sumber', r.sumber);
   set('kkpr_cuc', r.c_uc);
-  set('kkpr_peng_uraian', r.pengendalian_uraian);
+  const uraian = r.pengendalian_uraian || r.rpti_uraian || '';
+  set('kkpr_peng_uraian', uraian);
   set('kkpr_peng_jenis', r.pengendalian_jenis);
   set('kkpr_peng_efek', r.pengendalian_efektivitas);
   set('kkpr_p', r.probabilitas);
   set('kkpr_d', r.dampak_level);
+  if (r.bobot) set('kkpr_b', r.bobot);
   set('kkpr_prio', r.prioritas_risiko);
   set('kkpr_penanganan', r.pilihan_penanganan);
   // Sync slider labels
   ['p','d','tp','td'].forEach(k => kkprUpdateSlider(k));
-  set('kkpr_rpti', r.rpti_uraian);
+  set('kkpr_rpti', r.rpti_uraian || r.pengendalian_uraian || '');
   set('kkpr_jadwal', r.rpti_jadwal);
   set('kkpr_tp', r.target_p);
   set('kkpr_td', r.target_d);
+  if (r.target_bobot) set('kkpr_tb', r.target_bobot);
   // Jika sebab/dampak kosong, coba ambil dari master via auto-fill
   if (!r.sebab || !r.dampak_uraian) {
     const sel = document.getElementById('kkpr_kode');

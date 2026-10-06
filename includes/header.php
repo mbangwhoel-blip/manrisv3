@@ -22,6 +22,10 @@ $userName = $_SESSION['user_nama'] ?? 'User';
 <link rel="apple-touch-icon" sizes="64x64" href="favicon-mark.png?v=<?= $faviconVersion ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <!-- Custom CSS -->
@@ -41,7 +45,7 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand sidebar-brand-wrapper">
-    <img src="<?= APP_URL ?>/assets/img/logo.png" alt="Logo Kemenkes" class="brand-logo">
+    <img src="<?= APP_URL ?>/assets/img/logo.png" alt="Logo Kemenkes" class="brand-logo" loading="lazy" decoding="async">
     <div class="brand-text brand-text-wrapper">
       <span class="brand-title brand-title-text">Sistem Informasi Manajemen Risiko</span>
       <span class="brand-sub brand-sub-text">Balai Besar Laboratorium Kesehatan Lingkungan</span>
@@ -223,9 +227,12 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
   <!-- Navbar -->
   <header class="navbar">
     <div class="navbar-left">
+      <button type="button" class="btn-icon" id="sidebarToggleBtn" title="Toggle Sidebar" aria-label="Buka atau tutup navigasi">
+        <i class="fas fa-bars"></i>
+      </button>
     <?php if (($currentPage ?? '') === 'dashboard'): ?>
       <style>
-        .navbar-left{flex:1;min-width:0}
+        .navbar-left{flex:1;min-width:0;display:flex;align-items:center;gap:12px}
         .navbar-search{position:relative;flex:0 1 560px;max-width:560px;min-width:180px;margin-right:16px}
         .navbar-search form{position:relative;margin:0}
         .navbar-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.9rem;pointer-events:none}
@@ -245,9 +252,6 @@ window.CSRF_TOKEN = <?= jsEncode(csrfToken()) ?>;
         </form>
       </div>
     <?php else: ?>
-      <button type="button" class="btn-icon" id="sidebarToggleBtn" title="Toggle Sidebar" aria-label="Buka atau tutup navigasi">
-        <i class="fas fa-bars"></i>
-      </button>
       <nav class="breadcrumb-nav">
         <span class="breadcrumb-home"><i class="fas fa-home"></i></span>
         <i class="fas fa-chevron-right breadcrumb-sep"></i>
