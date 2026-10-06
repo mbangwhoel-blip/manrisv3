@@ -873,11 +873,9 @@ if (!function_exists('laporanRenderPerbandinganMatriks5x5')) {
                     $cnt = count($codes);
 
                     $html .= '<td class="heatmap-cell" style="border:1px solid #000; background-color:' . $bg . '; color:' . $fg . '; text-align:center; vertical-align:middle; padding:2px; height:42px; line-height:1.15; box-sizing:border-box;">';
-                    $html .= '<div style="font-size:7.5pt; font-weight:bold; opacity:0.85; line-height:1;">' . $skor . '</div>';
-
                     if ($cnt > 0) {
                         $badgeBg = ($skor >= 10 && $skor <= 14) ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.28)';
-                        $html .= '<div style="margin-top:2px; font-size:6.5pt; font-weight:800;">';
+                        $html .= '<div style="font-size:6.5pt; font-weight:800;">';
                         if ($cnt >= 3) {
                             $html .= '<span style="display:inline-block; background:' . $badgeBg . '; color:' . $fg . '; border-radius:2px; padding:0 2px; font-weight:900; margin-bottom:1px;">(' . $cnt . ')</span> ';
                         }
@@ -989,6 +987,18 @@ if (!function_exists('laporanUpgradeDraftHtmlWithMatriks')) {
             $draftHtml
         );
 
+        // Hapus angka skor (1-25) pada sel heatmap matriks jika ada pada draft yang tersimpan
+        $cleanDraft = preg_replace(
+            '/(<td[^>]*class="[^"]*heatmap-cell[^"]*"[^>]*>\s*)<div[^>]*style="[^"]*font-size:\s*7\.5pt[^"]*"[^>]*>\s*\d+\s*<\/div>\s*(<div[^>]*style=")(margin-top:\s*2px;\s*)/i',
+            '$1$2',
+            $cleanDraft
+        );
+        $cleanDraft = preg_replace(
+            '/<div[^>]*style="[^"]*font-size:\s*7\.5pt[^"]*"[^>]*>\s*\d+\s*<\/div>/i',
+            '',
+            $cleanDraft
+        );
+
         if (strpos($cleanDraft, 'matriks-perbandingan-wrap') !== false) {
             return $cleanDraft;
         }
@@ -1093,7 +1103,6 @@ if (!function_exists('laporanAddPerbandinganMatriksDocx')) {
                     $cnt = count($codes);
 
                     $c = $t->addCell(1600, ['bgColor' => $bgHex]);
-                    $c->addText((string)$skor, ['bold' => true, 'size' => 8, 'color' => $fgHex], $pCenter);
                     if ($cnt > 0) {
                         $txt = ($cnt >= 3 ? '(' . $cnt . ') ' : '') . implode(', ', $codes);
                         $c->addText($txt, ['bold' => true, 'size' => 7, 'color' => $fgHex], $pCenter);
@@ -2267,6 +2276,11 @@ if ($isGenerate) {
         line-height: 1.15;
     }
 
+    table.matriks-5x5-table td.heatmap-cell > div[style*="font-size:7.5pt"],
+    table.matriks-5x5-table td.heatmap-cell > div[style*="font-size: 7.5pt"] {
+        display: none !important;
+    }
+
     .matriks-legend-box {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -2545,6 +2559,11 @@ if ($isGenerate) {
             height: 34px !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+        }
+
+        table.matriks-5x5-table td.heatmap-cell > div[style*="font-size:7.5pt"],
+        table.matriks-5x5-table td.heatmap-cell > div[style*="font-size: 7.5pt"] {
+            display: none !important;
         }
 
         table.matriks-summary-table th,
