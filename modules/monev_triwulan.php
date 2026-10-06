@@ -31,6 +31,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $link  = trim($_POST['link_data_dukung'] ?? '');
         $kendala = trim($_POST['kendala'] ?? '');
         $rtl = trim($_POST['rencana_tindak_lanjut'] ?? '');
+        if ($rtl === '' || $rtl === '-') {
+            for ($pt = $triwulan - 1; $pt >= 1; $pt--) {
+                $st = $db->prepare("SELECT rencana_tindak_lanjut FROM monev_triwulan WHERE id_risiko=? AND triwulan=?");
+                $st->bind_param("ii", $idRisiko, $pt);
+                $st->execute();
+                $pr = $st->get_result()->fetch_assoc();
+                $st->close();
+                if ($pr && !empty(trim((string)$pr['rencana_tindak_lanjut'])) && trim((string)$pr['rencana_tindak_lanjut']) !== '-') {
+                    $rtl = trim((string)$pr['rencana_tindak_lanjut']);
+                    break;
+                }
+            }
+            if ($rtl === '' || $rtl === '-') {
+                $st = $db->prepare("SELECT rpti_uraian FROM kkpr_risiko WHERE id=?");
+                $st->bind_param("i", $idRisiko);
+                $st->execute();
+                $pr = $st->get_result()->fetch_assoc();
+                $st->close();
+                if ($pr && !empty(trim((string)$pr['rpti_uraian'])) && trim((string)$pr['rpti_uraian']) !== '-') {
+                    $rtl = trim((string)$pr['rpti_uraian']);
+                }
+            }
+        }
 
         // Hitung simpulan dengan membandingkan triwulan sebelumnya (atau penilaian awal)
         $nilaiSebelumnya = 0;
@@ -180,6 +203,26 @@ if ($activeId > 0) {
             }
             $r['upaya_display'] = $upayaDisplay !== '' ? $upayaDisplay : '-';
 
+            // Rencana Tindak Lanjut: ambil dari TW aktif, jika kosong fallback ke TW sebelumnya (TW n-1 .. TW 1), lalu ke KKPR (rpti_uraian)
+            $rtlDisplay = '';
+            if ($curr && !empty(trim((string)($curr['rencana_tindak_lanjut'] ?? ''))) && trim((string)$curr['rencana_tindak_lanjut']) !== '-') {
+                $rtlDisplay = trim((string)$curr['rencana_tindak_lanjut']);
+            } else {
+                for ($t = $activeTw; $t >= 1; $t--) {
+                    $prevRtl = $monevByTwRisk[$t][$idr]['rencana_tindak_lanjut'] ?? null;
+                    if ($prevRtl !== null && trim((string)$prevRtl) !== '' && trim((string)$prevRtl) !== '-') {
+                        $rtlDisplay = trim((string)$prevRtl);
+                        break;
+                    }
+                }
+                if ($rtlDisplay === '') {
+                    if (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '' && trim((string)$r['rpti_uraian']) !== '-') {
+                        $rtlDisplay = trim((string)$r['rpti_uraian']);
+                    }
+                }
+            }
+            $r['rtl_display'] = $rtlDisplay !== '' ? $rtlDisplay : '-';
+
             $rows[] = $r;
         }
     }
@@ -311,7 +354,7 @@ if ($activeId > 0) {
                 
                 <!-- K/RTL/L2 -->
                 <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td>
-                <td><?= $c ? nl2br(htmlspecialchars($c['rencana_tindak_lanjut'])) : '-' ?></td>
+                <td><?= $r['rtl_display'] !== '-' ? nl2br(htmlspecialchars($r['rtl_display'])) : '-' ?></td>
                 <td class="text-center" style="<?= $stBg ? "background:{$stBg};color:{$stColor};" : '' ?>">
                     <div style="font-weight:bold;font-size:0.8rem;"><?= htmlspecialchars($stLabel) ?></div>
                     <?php if ($stDesc !== ''): ?>
@@ -398,18 +441,21 @@ function editMonev(r, tw) {
     } else {
         document.getElementById('m_upaya').value = (r.upaya_display && r.upaya_display !== '-') ? r.upaya_display : '';
     }
+    if (r.curr && r.curr.rencana_tindak_lanjut && r.curr.rencana_tindak_lanjut.trim() !== '' && r.curr.rencana_tindak_lanjut.trim() !== '-') {
+        document.getElementById('m_rtl').value = r.curr.rencana_tindak_lanjut;
+    } else {
+        document.getElementById('m_rtl').value = (r.rtl_display && r.rtl_display !== '-') ? r.rtl_display : '';
+    }
     if (r.curr) {
         document.getElementById('m_p').value = r.curr.pantau_p || 1;
         document.getElementById('m_d').value = r.curr.pantau_d || 1;
         document.getElementById('m_link').value = r.curr.link_data_dukung || '';
         document.getElementById('m_kendala').value = r.curr.kendala || '';
-        document.getElementById('m_rtl').value = r.curr.rencana_tindak_lanjut || '';
     } else {
         document.getElementById('m_p').value = r.prev_p || 1;
         document.getElementById('m_d').value = r.prev_d || 1;
         document.getElementById('m_link').value = '';
         document.getElementById('m_kendala').value = '';
-        document.getElementById('m_rtl').value = '';
     }
     var m = new bootstrap.Modal(document.getElementById('modalMonev'));
     m.show();

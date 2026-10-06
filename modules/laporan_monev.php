@@ -450,6 +450,7 @@ if (!function_exists('laporanGetDataUnit')) {
                         END AS kendala,
                         CASE
                             WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(mp.rencana_tindak_lanjut) IS NOT NULL AND TRIM(mp.rencana_tindak_lanjut) != '' AND TRIM(mp.rencana_tindak_lanjut) != '-' THEN TRIM(mp.rencana_tindak_lanjut)
                             WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
                             ELSE ''
                         END AS rencana_tindak_lanjut
@@ -527,6 +528,7 @@ if (!function_exists('laporanGetDataUnit')) {
                         END AS kendala,
                         CASE
                             WHEN TRIM(m.rencana_tindak_lanjut) IS NOT NULL AND TRIM(m.rencana_tindak_lanjut) != '' AND TRIM(m.rencana_tindak_lanjut) != '-' THEN TRIM(m.rencana_tindak_lanjut)
+                            WHEN TRIM(mp.rencana_tindak_lanjut) IS NOT NULL AND TRIM(mp.rencana_tindak_lanjut) != '' AND TRIM(mp.rencana_tindak_lanjut) != '-' THEN TRIM(mp.rencana_tindak_lanjut)
                             WHEN TRIM(r.rpti_uraian) IS NOT NULL AND TRIM(r.rpti_uraian) != '' AND TRIM(r.rpti_uraian) != '-' THEN TRIM(r.rpti_uraian)
                             ELSE ''
                         END AS rencana_tindak_lanjut

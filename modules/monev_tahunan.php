@@ -57,6 +57,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksi'] ?? '') === 'simpan_
     $realisasi = trim($_POST['realisasi_pengendalian'] ?? '');
     $link = trim($_POST['link_data_dukung'] ?? '');
     $kendala = trim($_POST['kendala'] ?? ''); $rtl = trim($_POST['rencana_tindak_lanjut'] ?? '');
+    if ($rtl === '' || $rtl === '-') {
+        for ($pt = $twPost - 1; $pt >= 1; $pt--) {
+            $st = $db->prepare("SELECT rencana_tindak_lanjut FROM monev_triwulan WHERE id_risiko=? AND triwulan=?");
+            $st->bind_param("ii", $idRisiko, $pt);
+            $st->execute();
+            $pr = $st->get_result()->fetch_assoc();
+            $st->close();
+            if ($pr && !empty(trim((string)$pr['rencana_tindak_lanjut'])) && trim((string)$pr['rencana_tindak_lanjut']) !== '-') {
+                $rtl = trim((string)$pr['rencana_tindak_lanjut']);
+                break;
+            }
+        }
+        if ($rtl === '' || $rtl === '-') {
+            $st = $db->prepare("SELECT rpti_uraian FROM kkpr_risiko WHERE id=?");
+            $st->bind_param("i", $idRisiko);
+            $st->execute();
+            $pr = $st->get_result()->fetch_assoc();
+            $st->close();
+            if ($pr && !empty(trim((string)$pr['rpti_uraian'])) && trim((string)$pr['rpti_uraian']) !== '-') {
+                $rtl = trim((string)$pr['rpti_uraian']);
+            }
+        }
+    }
     // Simpulan & efektivitas dibandingkan dengan PENILAIAN AWAL (konsisten dengan
     // laporan_monev dan modul KKPMR) — bukan triwulan sebelumnya.
     $previous = $db->prepare('SELECT nilai_risiko AS nilai FROM kkpr_risiko WHERE id=?');
@@ -312,6 +335,26 @@ foreach ($rows as $r) {
         }
     }
 
+    // Rencana Tindak Lanjut: jika TW aktif belum terisi, otomatis prefill dari triwulan sebelumnya (TW n-1 .. TW 1) atau KKPR
+    $rtlPrefill = '';
+    if ($c && !empty(trim((string)($c['rencana_tindak_lanjut'] ?? ''))) && trim((string)$c['rencana_tindak_lanjut']) !== '-') {
+        $rtlPrefill = (string)$c['rencana_tindak_lanjut'];
+    } else {
+        $searchTw = ($jenisLaporan === 'tahunan') ? 4 : $twTarget;
+        for ($t = $searchTw; $t >= 1; $t--) {
+            $prevRtl = $twByRisk[$t][$r['id']]['rencana_tindak_lanjut'] ?? null;
+            if ($prevRtl !== null && trim((string)$prevRtl) !== '' && trim((string)$prevRtl) !== '-') {
+                $rtlPrefill = (string)$prevRtl;
+                break;
+            }
+        }
+        if ($rtlPrefill === '') {
+            if (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '' && trim((string)$r['rpti_uraian']) !== '-') {
+                $rtlPrefill = (string)$r['rpti_uraian'];
+            }
+        }
+    }
+
     $jsRows[] = [
         'id'    => (int)$r['id'],
         'nama'  => (string)$r['nama_risiko'],
@@ -322,7 +365,7 @@ foreach ($rows as $r) {
         'realisasi' => (string)($c['realisasi_pengendalian'] ?? ''),
         'link'  => (string)($c['link_data_dukung'] ?? ''),
         'kendala' => (string)($c['kendala'] ?? ''),
-        'rtl'   => (string)($c['rencana_tindak_lanjut'] ?? ''),
+        'rtl'   => $rtlPrefill,
     ];
 }
 

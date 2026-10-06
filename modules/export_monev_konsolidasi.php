@@ -121,6 +121,27 @@ foreach ($baseRisks as $r) {
     }
     $r['upaya_display'] = $upayaDisplay !== '' ? $upayaDisplay : '-';
 
+    // Rencana Tindak Lanjut:
+    $rtlDisplay = '';
+    if ($curr && !empty(trim((string)($curr['rencana_tindak_lanjut'] ?? ''))) && trim((string)$curr['rencana_tindak_lanjut']) !== '-') {
+        $rtlDisplay = trim((string)$curr['rencana_tindak_lanjut']);
+    } else {
+        $searchTw = ($jenisLaporan === 'tahunan') ? 4 : $twTarget;
+        for ($t = $searchTw; $t >= 1; $t--) {
+            $prevRtl = $monevByTwRisk[$t][$idr]['rencana_tindak_lanjut'] ?? null;
+            if ($prevRtl !== null && trim((string)$prevRtl) !== '' && trim((string)$prevRtl) !== '-') {
+                $rtlDisplay = trim((string)$prevRtl);
+                break;
+            }
+        }
+        if ($rtlDisplay === '') {
+            if (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '' && trim((string)$r['rpti_uraian']) !== '-') {
+                $rtlDisplay = trim((string)$r['rpti_uraian']);
+            }
+        }
+    }
+    $r['rtl_display'] = $rtlDisplay !== '' ? $rtlDisplay : '-';
+
     // Evaluasi simpulan & efektivitas perbandingan triwulan aktif vs kondisi awal yang ditampilkan
     if ($curr && $curr['pantau_nilai'] !== null) {
         $skorAkhir = (float)$curr['pantau_nilai'];
@@ -267,7 +288,7 @@ if (!function_exists('tCl')) {
                 <td class="text-center" style="<?= $c ? 'background:'.tBg($c['pantau_tingkat']).';color:'.tCl($c['pantau_tingkat']) : '' ?>"><?= $c ? $c['pantau_tingkat'] : '-' ?></td>
                 <td class="text-center"><?= htmlspecialchars($r['eval_simpulan']) ?></td>
                 <td class="text-center" style="<?= $r['eval_efektifitas']=='Efektif'?'background:#22c55e;color:#fff':($r['eval_efektifitas']=='Tidak Efektif'?'background:#dc2626;color:#fff':'') ?>"><?= htmlspecialchars($r['eval_efektifitas']) ?></td>
-                <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td><td><?= $c ? nl2br(htmlspecialchars($c['rencana_tindak_lanjut'])) : '-' ?></td>
+                <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td><td><?= $r['rtl_display'] !== '-' ? nl2br(htmlspecialchars($r['rtl_display'])) : '-' ?></td>
                 <td class="text-center" style="<?= $statusBg ? "background:{$statusBg};color:{$statusColor};" : '' ?>">
                     <div style="font-weight:bold;font-size:8.5px;"><?= htmlspecialchars($statusLabel) ?></div>
                     <?php if ($statusDesc !== ''): ?>

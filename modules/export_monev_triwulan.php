@@ -87,6 +87,26 @@ foreach ($baseRisks as $r) {
     }
     $r['upaya_display'] = $upayaDisplay !== '' ? $upayaDisplay : '-';
 
+    // Rencana Tindak Lanjut: ambil dari TW aktif, jika kosong fallback ke TW sebelumnya (TW n-1 .. TW 1), lalu ke KKPR (rpti_uraian)
+    $rtlDisplay = '';
+    if ($curr && !empty(trim((string)($curr['rencana_tindak_lanjut'] ?? ''))) && trim((string)$curr['rencana_tindak_lanjut']) !== '-') {
+        $rtlDisplay = trim((string)$curr['rencana_tindak_lanjut']);
+    } else {
+        for ($t = $activeTw; $t >= 1; $t--) {
+            $prevRtl = $monevByTwRisk[$t][$idr]['rencana_tindak_lanjut'] ?? null;
+            if ($prevRtl !== null && trim((string)$prevRtl) !== '' && trim((string)$prevRtl) !== '-') {
+                $rtlDisplay = trim((string)$prevRtl);
+                break;
+            }
+        }
+        if ($rtlDisplay === '') {
+            if (!empty($r['rpti_uraian']) && trim((string)$r['rpti_uraian']) !== '' && trim((string)$r['rpti_uraian']) !== '-') {
+                $rtlDisplay = trim((string)$r['rpti_uraian']);
+            }
+        }
+    }
+    $r['rtl_display'] = $rtlDisplay !== '' ? $rtlDisplay : '-';
+
     $rows[] = $r;
 }
 
@@ -207,7 +227,7 @@ if (!function_exists('tCl')) {
                 <td class="text-center"><?= $c ? htmlspecialchars($c['simpulan_tingkat']) : '-' ?></td>
                 <td class="text-center" style="<?= $c && $c['efektifitas']=='Efektif'?'background:#22c55e;color:#fff':'background:#dc2626;color:#fff' ?>"><?= $c ? htmlspecialchars($c['efektifitas']) : '-' ?></td>
                 <td><?= $c ? nl2br(htmlspecialchars($c['kendala'])) : '-' ?></td>
-                <td><?= $c ? nl2br(htmlspecialchars($c['rencana_tindak_lanjut'])) : '-' ?></td>
+                <td><?= $r['rtl_display'] !== '-' ? nl2br(htmlspecialchars($r['rtl_display'])) : '-' ?></td>
                 <td class="text-center" style="<?= $statusBg ? "background:{$statusBg};color:{$statusColor};" : '' ?>">
                     <div style="font-weight:bold;font-size:10px;"><?= htmlspecialchars($statusLabel) ?></div>
                     <?php if ($statusDesc !== ''): ?>
